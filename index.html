@@ -1,0 +1,2519 @@
+
+<!doctype html>
+<html lang="en">
+
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+		<title>You wouldn't download a car</title>
+		<style>:root {
+				--bg: #e8edf0;
+				--ground: #d5dde2;
+				--bld: #8fa1ad;
+				--fg: #14232d;
+				--acc: #0e7c86;
+				--cop: #2f5bd1;
+				--bad: #c2255c;
+				color-scheme: light;
+				box-sizing: border-box;
+				padding-top: env(safe-area-inset-top, 0px);
+				padding-bottom: env(safe-area-inset-bottom, 0px)
+			}
+
+			@media(prefers-color-scheme:dark) {
+				:root:not([data-theme="light"]) {
+					--bg: #0f1a21;
+					--ground: #17252e;
+					--bld: #34505f;
+					--fg: #dfe9ee;
+					--acc: #3dd6c6;
+					--cop: #6c93ff;
+					--bad: #ff6b9a;
+					color-scheme: dark
+				}
+			}
+
+			:root[data-theme="dark"] {
+				--bg: #0f1a21;
+				--ground: #17252e;
+				--bld: #34505f;
+				--fg: #dfe9ee;
+				--acc: #3dd6c6;
+				--cop: #6c93ff;
+				--bad: #ff6b9a;
+				color-scheme: dark
+			}
+
+			html {
+				scroll-padding-top: env(safe-area-inset-top, 0px)
+			}
+
+			body {
+				margin: 0;
+				padding: 10px;
+				background: var(--bg);
+				color: var(--fg);
+				font: 15px/1.45 "Avenir Next", "Segoe UI", system-ui, sans-serif
+			}
+
+			main {
+				max-width: 960px;
+				margin: 0 auto
+			}
+
+			canvas {
+				width: 100%;
+				display: block;
+				border: 1px solid var(--bld);
+				border-radius: 4px;
+				background: var(--bg)
+			}
+
+			#hud {
+				white-space: pre-wrap;
+				margin: 8px 0
+			}
+
+			button {
+				font: inherit;
+				color: var(--fg);
+				background: var(--ground);
+				border: 1px solid var(--bld);
+				border-radius: 4px;
+				padding: 5px 12px;
+				margin: 0 6px 6px 0;
+				cursor: pointer
+			}
+
+			button:focus-visible {
+				outline: 2px solid var(--acc);
+				outline-offset: 2px
+			}
+
+			pre {
+				white-space: pre-wrap;
+				font: 12px/1.5 ui-monospace, Menlo, monospace;
+				opacity: .75;
+				margin: 8px 0
+			}</style>
+	</head>
+
+	<body>
+		<main>
+			<canvas id="c"></canvas>
+			<div id="hud"></div>
+			<div>City: <button onclick="GSA.start({city:'sample'})">Test Valley</button><button onclick="GSA.start({city:'river'})">River City</button></div>
+			<div>Race: <button onclick="GSA.start({race:'nord'})">Nord</button><button onclick="GSA.start({race:'elf'})">Elf</button><button onclick="GSA.start({race:'martian'})">Martian</button></div>
+			<div>Interior: <button onclick="GSA.start({interior:'stock'})">Stock data center</button><button onclick="GSA.start({interior:'zombie'})">Zombie data center</button></div>
+			<pre id="log"></pre>
+			<p style="font-size:13px;opacity:.7">Click the game to capture the mouse (Esc releases; dragging also turns the camera). The mouse turns the camera and WASD moves relative to it. Space jumps, and Space again while airborne against a wall wall-jumps. Nord: jump, then C or Shift to ground pound. Elf: hold click or F for the frost beam. Martian: click or F fires plasma. Press E next to the red car to drive (W/S throttle, A/D steer, E exits); you can run cops over, and only the embassy door works from the car. Test Valley also has a gather-and-craft loop: pick up the luna moth wing (southeast) and ice wraith teeth (northwest), press E at the Alchemy Station (southeast) to brew, then Q to drink: cops and zombies lose you for 25 seconds. Plug in content from the console, for example <code>GSA.packs.races.mine = {...}</code> then <code>GSA.start({race:'mine'})</code>. Engine events such as <code>in:front</code>, <code>out:back</code>, <code>deliver</code> and <code>alarm_raised</code> go through a global bus, so hook them from the console with <code>GSA.bus.on('alarm_raised', (ctx) => ...)</code> (the callback receives the live state plus <code>ctx.heat(d)</code>).</p>
+		</main>
+		<!-- Libraries -->
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+		<script>/* Event bus: the only place engine events are published.
+   Content packs and console scripts subscribe here instead of reading engine state.
+
+   GSA.bus.on(name, fn)       subscribe
+   GSA.bus.off(name, fn)      unsubscribe
+   GSA.bus.emit(name, ...a)   publish (a throwing subscriber is logged, not rethrown)
+*/
+const subs = new Map();
+
+const bus = {
+  on(name, fn) {
+    if (!subs.has(name)) subs.set(name, new Set());
+    subs.get(name).add(fn);
+    return fn;
+  },
+  off(name, fn) {
+    const s = subs.get(name);
+    if (s && s.delete(fn) && !s.size) subs.delete(name);
+  },
+  offAll() { subs.clear(); },
+  emit(name, ...args) {
+    for (const fn of subs.get(name) || []) {
+      try { fn(...args); } catch (err) { console.error('bus subscriber threw for', name, err); }
+    }
+  }
+};
+
+(window.GSA = window.GSA || {}).bus = bus;
+</script></script>
+		<script>/* inputs.js — key and mouse bindings, using Quake key names.
+
+     bind('w', '+forward')   a held button:  pressed('forward'), tapped('forward')
+     bind('e', 'exit')       a one-shot command: GSA.inputs.handlers.exit = () => ...
+
+   Keys, mouse buttons and the wheel all resolve against the same table. Held
+   buttons are refcounted, so two keys bound to one button behave. tapped() is
+   true for the frame after a button goes down, even if it was released again
+   before the frame ran; the main loop calls endFrame() once per frame. */
+
+const bindings = new Map(), buttons = {}, taps = new Set(), handlers = {};
+
+const bind = (key, cmd) => bindings.set(key.toLowerCase(), cmd);
+const pressed = name => (buttons[name] || 0) > 0;
+const tapped = name => taps.has(name);
+const endFrame = () => taps.clear();
+
+const KEYNAME = { ' ': 'space', ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
+const quakeKey = e =>
+  e.type == 'wheel' ? (e.deltaY > 0 ? 'mwheeldown' : 'mwheelup')
+  : e.type.startsWith('mouse') ? 'mouse1'
+  : KEYNAME[e.key] || e.key.toLowerCase();
+
+function run(cmdString, down) {
+  for (const line of cmdString.split(';')) {
+    const [cmd, ...args] = line.trim().split(/\s+/);
+    if (!cmd) continue;
+    if (cmd[0] == '+') {
+      const b = cmd.slice(1), was = buttons[b] || 0;
+      buttons[b] = Math.max(0, was + (down ? 1 : -1));
+      if (down && !was) taps.add(b);
+    } else if (down && handlers[cmd]) handlers[cmd](...args);
+  }
+}
+
+const listen = (type, down) => addEventListener(type, e => {
+  if (e.repeat) return;
+  const cmd = bindings.get(quakeKey(e));
+  if (!cmd) return;
+  if (down && (cmd.includes('+') || e.type != 'keydown')) e.preventDefault();
+  run(cmd, down);
+}, { passive: false });
+
+listen('keydown', 1);
+listen('mousedown', 1);
+listen('wheel', 1);
+listen('keyup', 0);
+listen('mouseup', 0);
+addEventListener('blur', () => { for (const b in buttons) buttons[b] = 0; });
+
+(window.GSA = window.GSA || {}).inputs = { bind, pressed, tapped, endFrame, handlers };
+</script></script>
+		<script>bind('w', '+forward');
+bind('s', '+backward');
+bind('a', '+move_left');
+bind('d', '+move_right');
+bind('shift', '+crouch');
+bind('space', '+jump');
+bind('q', 'item_use');
+bind('c', 'item_prev');
+bind('v', 'item_next');
+bind('mwheelup', 'weapon_prev');
+bind('mwheeldown', 'weapon_next');
+bind('mouse1', '+attack');
+bind('e', 'exit');
+bind('x', '+dive');</script></script>
+		<script>/* Name a snake_case key as title case ("ice_wraith_teeth" -> "Ice wraith teeth"). */
+const niceName = k => k.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase());
+
+/* Site interfaces: what a site type is defined by. */
+const IFACE = {
+	data_center: {
+		portals: ['front', 'back'],
+		events: ['alarm_raised']
+	},
+	embassy: {
+		portals: ['door']
+	}
+};
+
+/* Coordinates are east, north, up (x, y, z), right-handed: x runs east, y runs north, z is up.
+   A rect is [x, y, w, d] from its south-west corner. A site's front door faces south.
+
+   Packs: cities place sites, interiors are separate (larger) spaces, races are bounded modifiers
+   plus an avatar builder. Scripts and races never touch engine state directly. */
+const packs = {
+	/* §2/§7 Archetypes: appearance and stat balances live here. The runtime owns
+	   only the mob lifecycle, so a pack can add any archetype key here and spawnMob(key, x, y) will use it. */
+	mobs: {
+		zombie: {
+			name: 'Zombie',
+			faction: 'zombies',
+			health: 3,
+			speed: 2.4,
+			radius: .4,
+			viewDist: 8,
+			viewCone: 1.4,
+			hearingLevel: 1.0,
+			attackPower: 1,
+			attackInterval: 1,
+			reach: .7,
+			tetherRadius: null,
+			color: '#5a8f3a',
+			dropTable: [{ itemKey: 'zombie_gib', chance: .5, count: 1 }],
+		},
+		cop: {
+			name: 'Cop',
+			faction: 'cops',
+			health: 4,
+			speed: 3.6,
+			radius: .4,
+			viewDist: 15,
+			viewCone: 1.8,
+			hearingLevel: 2.5,
+			attackPower: 1,
+			attackInterval: 1,
+			reach: .9,
+			tetherRadius: null,
+			color: '#2f5bd1',
+			dropTable: [],
+		},
+		ice_wraith: {
+			name: 'Ice Wraith',
+			faction: 'hostile-animals',
+			health: 8,
+			speed: 3.8,
+			radius: .5,
+			viewDist: 11,
+			viewCone: 1.2,
+			hearingLevel: 4.0,
+			attackPower: 2,
+			attackInterval: 1.2,
+			reach: 2.0,
+			tetherRadius: 7.5,
+			color: '#bfe9ff',
+			dropTable: [{ itemKey: 'ice_wraith_teeth', chance: 1, count: 1 }],
+		},
+		luna_moth: {
+			name: 'Luna Moth',
+			faction: 'passive-critters',
+			health: 1,
+			speed: 2.2,
+			radius: .3,
+			viewDist: 6,
+			viewCone: 3.14,
+			hearingLevel: 1.5,
+			attackPower: 0,
+			attackInterval: 1,
+			reach: .8,
+			tetherRadius: 4,
+			color: '#b8f5c4',
+			dropTable: [{ itemKey: 'luna_moth_wing', chance: 1, count: 1 }],
+		},
+	},
+	items: {
+		luna_moth_wing: {
+			name: 'Luna moth wing',
+			color: '#b8f5c4'
+		},
+	ice_wraith_teeth: {
+		name: 'Ice wraith teeth',
+		color: '#bfe9ff',
+	},
+	zombie_gib: {
+		name: 'Zombie gib',
+		color: '#7a9a5a',
+	},
+		invisibility_potion: {
+			name: 'Invisibility potion',
+			color: '#c084fc',
+			use: { invis: 25, msg: 'You drink the invisibility potion' }
+		},
+		plasma_gun: {
+			name: 'Martian Plasma Gun',
+			weight: 1,
+      type: 'weapon',
+			weapon_type: 'bolt',
+			speed: 18,
+			damage: 1.5,
+		}
+	},
+	innate_weapons: {
+		'fists': {
+			name: 'Fists',
+			weapon_type: 'melee',
+			range: .5,
+			damage: 1,
+			knockback: 1,
+		},
+		'frost_beam': {
+			name: 'Frost beam',
+			range: 9,
+			weapon_type: 'cone',
+			angle: .3,
+			dps: 2.2,
+			slow: 1.2,
+		},
+	},
+	recipes: {
+		invisibility_potion: {
+			station: 'alchemy',
+			needs: {
+				luna_moth_wing: 1,
+				ice_wraith_teeth: 1
+			}
+		}
+	},
+	city: {
+		river: {
+			name: 'River City',
+			size: [48, 26],
+			spawn: [16, 9],
+			car: [18, 9],
+			water: [
+				[20, 20, 8, 6],
+				[20, 9, 8, 7],
+				[20, 0, 8, 5]
+			],
+			bridges: [
+				[20, 16, 8, 4],
+				[20, 5, 8, 4]
+			],
+			sites: [{
+				id: 'dc_west',
+				type: 'data_center',
+				name: 'Westbank Data Center',
+				r: [5, 12, 8, 5]
+			}, {
+				id: 'dc_east',
+				type: 'data_center',
+				name: 'Eastbank Server Farm',
+				r: [34, 3, 8, 5]
+			}, {
+				id: 'emb_cn',
+				type: 'embassy',
+				nation: 'china',
+				name: 'Chinese Embassy',
+				r: [35, 11, 6, 5]
+			}, {
+				id: 'emb_fr',
+				type: 'embassy',
+				nation: 'france',
+				name: 'French Embassy',
+				r: [5, 3, 6, 5]
+			}]
+		},
+		sample: {
+			name: 'Sample City',
+			size: [44, 26],
+			/* A spawner keeps one mob alive at its spot and brings a new one `delay`
+			   seconds after it dies. The mob's dropTable gives the player its wing / teeth. */
+			spawners: [{
+				mob: 'luna_moth',
+				at: [41.5, 2.5],
+				delay: 15
+			}, {
+				mob: 'ice_wraith',
+				at: [2.5, 23.5],
+				delay: 15
+			}],
+			stations: [{
+				type: 'alchemy',
+				name: 'Alchemy Station',
+				at: [38, 2.5]
+			}],
+			sites: [{
+				id: 'dc_far',
+				type: 'data_center',
+				name: 'Nexus Data Center',
+				r: [4, 17, 8, 5]
+			}, {
+				id: 'dc_near',
+				type: 'data_center',
+				name: 'Corner Server Farm',
+				r: [30, 5, 8, 5]
+			}, {
+				id: 'emb_cn',
+				type: 'embassy',
+				nation: 'china',
+				name: 'Chinese Embassy',
+				r: [30, 16, 6, 5]
+			}, {
+				id: 'emb_fr',
+				type: 'embassy',
+				nation: 'france',
+				name: 'French Embassy',
+				r: [4, 4, 6, 5]
+			}]
+		}
+	},
+	interiors: {
+		stock: {
+			implements: 'data_center',
+			size: [30, 9],
+			portals: {
+				front: [1.5, 4.5],
+				back: [28.5, 4.5]
+			},
+			walls: [
+				[7, 3, 1, 6],
+				[13, 0, 1, 6],
+				[19, 3, 1, 6],
+				[24, 0, 1, 6]
+			],
+			ram: [
+				[10, 7],
+				[16, 3],
+				[21, 7],
+				[26, 3],
+				[27, 7]
+			],
+			enemies: [],
+			heatPolicy: 'paused',
+			script: {
+				alarm_raised: a => a.heat(2)
+			}
+		},
+		zombie: {
+			implements: 'data_center',
+			size: [64, 12],
+			portals: {
+				front: [1.5, 6],
+				back: [62.5, 6]
+			},
+			walls: [
+				[8, 4, 1, 8],
+				[16, 0, 1, 8],
+				[24, 4, 1, 8],
+				[32, 0, 1, 8],
+				[40, 4, 1, 8],
+				[48, 0, 1, 8],
+				[56, 4, 1, 8]
+			],
+			ram: [
+				[12, 10],
+				[20, 3],
+				[36, 10],
+				[44, 3],
+				[60, 9]
+			],
+			enemies: [
+				[14, 6],
+				[28, 6],
+				[38, 6],
+				[46, 9],
+				[52, 4],
+				[58, 6]
+			],
+			heatPolicy: 'paused',
+			script: {
+				alarm_raised: a => a.heat(2)
+			}
+		}
+	},
+	/* A race: speed, jump (v and gravity), hit cooldown, alarm heat multiplier, and a build(add) avatar. */
+	races: {
+		nord: {
+			name: 'Nord',
+			speed: 4.6,
+			gravity: 22,
+			jumpV: 7,
+			hitCd: 2.4,
+			alarmMult: 1,
+			flags: ['bowser_slam'],
+			innate_weapons: ['fists'],
+			build: a => {
+				a(new THREE.CylinderGeometry(.48, .48, 1.1, 12), '#8a5a2b', 0, .55, 0);
+				a(new THREE.SphereGeometry(.3, 12, 8), '#e8c9a6', 0, 1.35, 0);
+				a(new THREE.ConeGeometry(.08, .45, 6), '#eeeeee', -.3, 1.65, 0).rotation.z = .6;
+				a(new THREE.ConeGeometry(.08, .45, 6), '#eeeeee', .3, 1.65, 0).rotation.z = -.6
+			}
+		},
+		elf: {
+			name: 'Elf',
+			speed: 5.2,
+			gravity: 20,
+			jumpV: 8,
+			hitCd: 1.2,
+			alarmMult: .5,
+			flags: [],
+			innate_weapons: ['fists', 'frost_beam'],
+			build: a => {
+				a(new THREE.CylinderGeometry(.26, .32, 1.4, 12), '#2e8b57', 0, .7, 0);
+				a(new THREE.SphereGeometry(.24, 12, 8), '#f0dcc0', 0, 1.65, 0);
+				a(new THREE.ConeGeometry(.07, .45, 6), '#f0dcc0', -.35, 1.7, 0).rotation.z = Math.PI / 2;
+				a(new THREE.ConeGeometry(.07, .45, 6), '#f0dcc0', .35, 1.7, 0).rotation.z = -Math.PI / 2
+			}
+		},
+		martian: {
+			name: 'Martian',
+			speed: 5.8,
+			gravity: 7,
+			jumpV: 7,
+			hitCd: 1.2,
+			alarmMult: 1,
+			flags: [],
+			inventory: {'plasma_gun': 1},
+			build: a => {
+				a(new THREE.SphereGeometry(.5, 12, 10), '#c1440e', 0, .6, 0);
+				a(new THREE.SphereGeometry(.45, 12, 10), '#7ac74f', 0, 1.45, 0);
+				a(new THREE.CylinderGeometry(.03, .03, .5, 6), '#7ac74f', 0, 2.0, 0);
+				a(new THREE.SphereGeometry(.08, 8, 6), '#7ac74f', 0, 2.28, 0)
+			}
+		}
+	}
+};
+
+
+
+
+/* Mission = roles + constraints + objective steps. It never names a specific map. */
+const mission = {
+	roles: {
+		source: {
+			type: 'data_center'
+		},
+		dest: {
+			type: 'embassy',
+			nation: 'china'
+		}
+	},
+	dist: [8, 40],
+	of: 5,
+	thr: .6,
+	steps: [{
+		t: 'Enter {source} through the front',
+		ev: 'in:front'
+	}, {
+		t: 'Take RAM and leave through the back',
+		ev: 'out:back',
+		ok: s => s.carry > 0
+	}, {
+		t: 'Deliver to {dest}, keeping at least 60% of the RAM',
+		ev: 'deliver'
+	}]
+};
+
+const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);</script></script>
+    <script>/* Site layout: portal geometry and mission binding. Pure functions over packs. */
+/* Where the rings of a site are. x runs east and y north, so the front door
+   (and the embassy door) faces south and the back door faces north. */
+const portalsOf = s => {
+	const [x, y, w, d] = s.r, c = x + w / 2;
+	return {
+		front: [c, y - .8],
+		back: [c, y + d + .8],
+		door: [c, y - .8]
+	};
+};
+
+function bindSite(m, city) {
+	const log = [],
+		c = {};
+	for (const [k, q] of Object.entries(m.roles)) c[k] = city.sites.filter(s => {
+		const ok = s.type == q.type && (!q.nation || s.nation == q.nation);
+		log.push(`${k}: ${s.name} ${ok ? 'matches' : 'rejected'}`);
+		return ok
+	});
+	for (const a of c.source)
+		for (const b of c.dest) {
+			const d = dist(portalsOf(a).back, portalsOf(b).door);
+			if (d >= m.dist[0] && d <= m.dist[1]) {
+				log.push(`bound ${a.name} to ${b.name} (${d | 0} tiles apart)`);
+				return {
+					ok: 1,
+					source: a,
+					dest: b,
+					log
+				}
+			}
+			log.push(`${a.name} to ${b.name}: ${d | 0} tiles, needs ${m.dist[0]}-${m.dist[1]}`)
+		}
+	log.push('no valid binding');
+	return {
+		ok: 0,
+		log
+	};
+}
+
+const conforms = (i, t) => i.implements == t && IFACE[t].portals.every(p => i.portals[p]) && i.ram.length > 0;
+
+/* The portal rings of a scene (default: the one the player is in): [{ k, at }]. */
+function portalList(s, scene = s.scene) {
+	if (scene == 'int') return Object.entries(s.I.portals).map(([k, at]) => ({ k, at }));
+	const a = portalsOf(s.B.source), d = portalsOf(s.B.dest);
+	return [{ k: 'front', at: a.front }, { k: 'back', at: a.back }, { k: 'door', at: d.door }];
+}
+</script></script>
+		<script>/* physics.js — the engine's collision and movement builtins, like QuakeC's
+   walkmove and traceline. Content (data/*.js) calls these; nothing here knows
+   about Mario, cars or meshes.
+
+   Coordinates are east, north, up: x east, y north, z up (right-handed). Walls
+   are rects [x, y, w, d] from their south-west corner. Walls and bounds come
+   from s.walls / s.size, which engine.js refreshes whenever the scene changes. */
+
+/* Does a body of radius r at (x, y) overlap any wall rect? */
+const RC = (x, y, ws, r = .35) => ws.some(([a, b, c, d]) => x + r > a && x - r < a + c && y + r > b && y - r < b + d);
+
+/* Wall height: interiors have low ceilings, the city has tall buildings. */
+const WH = s => s.scene == 'int' ? 2.2 : 5;
+
+/* Is a body at height z blocked at (x, y)? Walls block anything below their top;
+   city water blocks anything walking (below 0.3). */
+const hit = (s, x, y, z) => z < WH(s) - .2 && RC(x, y, s.walls) || z < .3 && s.scene == 'city' && RC(x, y, s.city.water || []);
+
+/* Move e by (dx, dy), each axis separately so it slides along walls. Returns the
+   normal of the last wall it ran into, or null. */
+const mv = (s, e, dx, dy) => {
+  const z = e.z || 0;
+  let wall = null;
+  const x = e.x + dx;
+  if (x > .35 && x < s.size[0] - .35) {
+    if (!hit(s, x, e.y, z)) e.x = x;
+    else if (dx) wall = [-Math.sign(dx), 0];
+  }
+  const y = e.y + dy;
+  if (y > .35 && y < s.size[1] - .35) {
+    if (!hit(s, e.x, y, z)) e.y = y;
+    else if (dy) wall = [0, -Math.sign(dy)];
+  }
+  return wall;
+};
+
+/* Approach (tx, ty) by at most speed * dt, facing the way it is going. Headings
+   are compass bearings in radians: 0 is north, pi/2 is east. */
+const steerTowards = (s, e, tx, ty, speed, dt) => {
+  const dx = tx - e.x, dy = ty - e.y, d = Math.hypot(dx, dy);
+  if (d < .01) return;
+  const step = Math.min(speed * dt, d);
+  mv(s, e, dx / d * step, dy / d * step);
+  e.heading = Math.atan2(dx, dy);
+};
+
+/* Knockback in small steps so a shove cannot tunnel through a thin wall. */
+const shove = (s, e, dx, dy) => {
+  for (let i = 0; i < 6; i++) mv(s, e, dx / 6, dy / 6);
+};
+
+(window.GSA = window.GSA || {}).physics = { RC, WH, hit, mv, steerTowards, shove };
+</script></script>
+		<script>/* ai.js — what a mob knows and what happens to it: factions, senses, spawning,
+   drops, damage. What it does about any of that is its MobScript (scripting.js).
+
+   A mob is an edict with base.type == 'actor'. Its form (stats from packs.mobs)
+   is e.base; its faction, hp and state are on the edict. */
+
+/* How a faction treats the player: 'hostile', 'flee' or 'neutral'. A function is
+   asked with the state. Any faction not listed here is hostile. */
+const ATTITUDE = {
+  cops: s => s.heat >= 1 ? 'hostile' : 'neutral',
+  'passive-critters': 'flee',
+  civilians: 'neutral'
+};
+
+const attitude = (m, s) => {
+  const a = ATTITUDE[m.faction] || 'hostile';
+  return typeof a == 'function' ? a(s) : a;
+};
+const hostile = (m, s) => attitude(m, s) == 'hostile';
+
+/* Mobs that exist in the scene the player is standing in. */
+const live = s => s.edicts.filter(e => !e.free && !e.dead && e.sc == s.scene && e.base.type == 'actor');
+
+/* Do the player's weapons and abilities affect this? Anything that fights or
+   flees from the player, plus cops. */
+const isTarget = (e, s) => !e.free && !e.dead && e.base.type == 'actor' && (e.faction == 'cops' || attitude(e, s) != 'neutral');
+const combatTargets = s => live(s).filter(m => isTarget(m, s));
+
+/* ---------- Senses ---------- */
+
+/* Is there a wall between two points? Sampled every half tile. */
+const blocked = (s, x0, y0, x1, y1) => {
+  const n = Math.ceil(dist([x0, y0], [x1, y1]) * 2);
+  for (let i = 1; i < n; i++) {
+    const t = i / n;
+    if (RC(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, s.walls)) return true;
+  }
+  return false;
+};
+
+const wrapAngle = a => Math.atan2(Math.sin(a), Math.cos(a));
+
+/* Can this mob see the player? Invisibility cloaks light, not sound. */
+const sees = (m, s) => {
+  const p = s.p, dx = p.x - m.x, dy = p.y - m.y;
+  return s.invis <= 0
+    && Math.hypot(dx, dy) <= m.base.viewDist
+    && Math.abs(wrapAngle(Math.atan2(dx, dy) - m.heading)) <= m.base.viewCone / 2
+    && !blocked(s, m.x, m.y, p.x, p.y);
+};
+
+/* Perceived volume = loudness * (1 - dist/radius), halved behind a wall. A mob that
+   hears at least its hearingLevel gets OnAlert(x, y). radius = Infinity is an alarm. */
+const emitSound = (x, y, radius, loudness) => {
+  const s = GSA.state();
+  for (const m of live(s)) {
+    const d = dist([m.x, m.y], [x, y]);
+    if (d > radius) continue;
+    const heard = loudness * (1 - d / radius) * (blocked(s, x, y, m.x, m.y) ? .5 : 1);
+    if (heard >= m.base.hearingLevel) m.script.dispatch('OnAlert', x, y, heard);
+  }
+};
+
+/* ---------- Combat ---------- */
+
+/* The player was hit: they drop a stick of RAM, then are safe for a moment. */
+const hurt = s => {
+  if (s.cd <= 0 && s.carry > 0) {
+    s.carry--;
+    s.cd = s.race.hitCd;
+    s.msg = 'You dropped a stick of RAM';
+  }
+};
+
+/* One path for damage and death: the target's script decides what it means. */
+const damageMob = (e, amount, src) => {
+  if (e.free || e.dead || !e.script) return;
+  e.script.dispatch('OnHit', src, amount);
+};
+const killMob = e => damageMob(e, Infinity, null);
+
+/* ---------- Lifecycle ---------- */
+
+const spawnMob = (key, x, y, o = {}) => {
+  const def = packs.mobs[key];
+  if (!def) return null;
+  return spawn({
+    base: { type: 'actor', ...def, key },
+    sc: o.sc || GSA.state().scene,
+    x, y,
+    heading: Math.random() * 2 * Math.PI,
+    radius: def.radius || .4,
+    hp: def.hp,
+    faction: o.faction || def.faction,
+    spawnPoint: [x, y],
+    movetype: 'MOVETYPE_STEP',
+    solid: 'SOLID_TRIGGER',
+    script: MobScript
+  });
+};
+
+const spawnDrops = e => {
+  for (const d of e.base.dropTable || []) {
+    if (Math.random() >= d.chance) continue;
+    for (let k = 0; k < (d.count || 1); k++) GSA.engine.addItem(d.itemKey, e.x, e.y, e.sc);
+  }
+};
+
+const getMobsInRadius = (x, y, r, f) => live(GSA.state()).filter(m => dist([m.x, m.y], [x, y]) <= r && (!f || f(m)));
+
+const getNearestMob = (x, y, f) => {
+  let best = null, bd = Infinity;
+  for (const m of live(GSA.state())) {
+    const d = dist([m.x, m.y], [x, y]);
+    if (d < bd && (!f || f(m))) { bd = d; best = m; }
+  }
+  return best;
+};
+
+(window.GSA = window.GSA || {}).ai = {
+  attitude, hostile, live, isTarget, combatTargets, sees, emitSound, hurt,
+  damageMob, killMob, spawnMob, spawnDrops, getMobsInRadius, getNearestMob
+};
+</script></script>
+		<script>/* scripting.js — QuakeC entities with Papyrus scripts on top.
+
+   QUAKEC  (every world object is an edict: one slot of the pool S.edicts, slot 0 is the player)
+     spawn(fields), remove(e)            claim and free a slot
+     e.owner  e.enemy  e.health          who made it, who it is after, health
+     e.solid  e.movetype                 SOLID_NOT / SOLID_TRIGGER; MOVETYPE_NONE / STEP / FLY / WALK
+     e.nextthink                         when to think next (time; 0 = never) -> OnUpdate
+     touch                               -> OnTouch(other), every frame two triggers overlap
+     T_Damage(targ, inflictor, attacker, damage), Killed(targ, attacker)
+     sv_physics                          Quake's SV_Physics: think, move, touch
+     (x, y, z) and (vx, vy, vz) are Quake's origin and velocity (east, north, up); radius is its size.
+     A WALK edict is moved by its (vx, vy) with collision, like the player: PlayerPreThink sets the
+     velocity (data/mario64.js), the engine moves it.
+
+   PAPYRUS  (a script is a class on an edict; Self is `self`; the form is e.base)
+     states      GoToState, GetState, OnBeginState, OnEndState; '' is the empty state
+     timer       RegisterForSingleUpdate(seconds), UnregisterForUpdate(), OnUpdate()
+     events      OnHit(akAggressor, akSource)   OnDeath(akKiller)
+                 OnGainLOS / OnLostLOS(akViewer, akTarget)   OnPackageEnd(package)
+                 OnActivate(akActionRef)
+     functions   PlaceAtMe(form), Delete()
+     classes     Form > ObjectReference > Actor
+
+   ONLY INVENTED: OnAlert(x, y, loudness), the sound event; and the loudness model behind it.
+   Inside a script an event runs the current state's handler, else the script's own. */
+
+const MAX_EDICTS = 512;
+
+/* ---------- Entities (QuakeC) ---------- */
+
+/* The whole schema, in one place. Scripts may hang extra fields on an edict. */
+class Edict {
+  constructor(index) {
+    this.index = index;
+    this.reset();
+  }
+
+  reset() {
+    this.free = true;
+    this.sc = 'city';              /* the scene it lives in; only the player's scene runs */
+    this.x = this.y = this.z = 0;
+    this.vx = this.vy = this.vz = 0;
+    this.heading = 0;              /* compass bearing in radians: 0 north, pi/2 east */
+    this.pitch = 0;                /* nose-down tilt, and a vertical squash, for the renderer to show */
+    this.zscale = 1;
+    this.wn = null;                /* the last wall it ran into: its normal, and when */
+    this.wn_time = -1;
+    this.vehicle = null;           /* the vehicle edict it is riding */
+    this.radius = .4;              /* touch radius */
+    this.movetype = 'MOVETYPE_NONE';
+    this.solid = 'SOLID_NOT';
+    this.base = null;
+    this.owner = null;
+    this.health = 0;
+    this.dead = false;
+    this.faction = 'neutral';
+    this.enemy = null;
+    this.targetPos = null;
+    this.spawnPoint = null;
+    this.activePackage = null;
+    this.packageState = {};
+    this.attack_finished = 0;
+    this.slow = 0;                 /* seconds of being slowed */
+    this.los = false;              /* could it see the player last frame */
+    this.nextthink = 0;
+    this.script = null;
+    this.activeState = '';
+    this.mesh = null;
+  }
+}
+
+const newPool = () => Array.from({ length: MAX_EDICTS }, (_, i) => new Edict(i));
+
+/* Claim a free slot (not 0, which is the player), set its fields, and attach the
+   script class given as `script`. Returns null if the pool is full. */
+const spawn = (fields = {}) => {
+  const s = GSA.state(), e = s.edicts.find((x, i) => i && x.free);
+  if (!e) return null;
+  const { script, ...rest } = fields;
+  Object.assign(e, { free: false, sc: s.scene }, rest);
+  if (script) e.script = new script(e);
+  return e;
+};
+
+const remove = e => {
+  if (!e || e.free) return;
+  if (e.mesh) GSA.render.release(e);
+  e.reset();
+};
+
+/* Subtract health; at zero or less the target is Killed, otherwise it is hit. */
+const T_Damage = (targ, inflictor, attacker, damage) => {
+  if (targ.free || targ.dead) return;
+  targ.health -= damage;
+  if (targ.health <= 0) Killed(targ, attacker);
+  else if (targ.script) targ.script.dispatch('OnHit', attacker, inflictor);
+};
+
+const Killed = (targ, attacker) => {
+  if (targ.script) targ.script.dispatch('OnDeath', attacker);
+};
+
+/* ---------- Scripts (Papyrus) ---------- */
+
+class Form {
+  constructor(self) {
+    this.self = self;
+    this.states = {};
+  }
+
+  GoToState(next) {
+    if (this.self.activeState === next) return;
+    this.dispatch('OnEndState');
+    this.self.activeState = next;
+    this.dispatch('OnBeginState');
+  }
+
+  GetState() { return this.self.activeState; }
+
+  /* Does the current state or the script handle this event? */
+  handles(event) {
+    const st = this.states[this.self.activeState];
+    return !!((st && st[event]) || this[event]);
+  }
+
+  dispatch(event, ...args) {
+    const st = this.states[this.self.activeState],
+      fn = (st && st[event]) || this[event];
+    return fn && fn.apply(this, args);
+  }
+
+  /* Papyrus has one update timer per script; Quake has one nextthink per edict. */
+  RegisterForSingleUpdate(seconds) { this.self.nextthink = GSA.state().t + seconds; }
+  UnregisterForUpdate() { this.self.nextthink = 0; }
+}
+
+class ObjectReference extends Form {
+  /* Make a new mob or item (a key of packs.mobs or packs.items) where this is. */
+  PlaceAtMe(key) {
+    const s = this.self;
+    return packs.mobs[key] ? GSA.ai.spawnMob(key, s.x, s.y, { sc: s.sc }) : GSA.engine.addItem(key, s.x, s.y, s.sc);
+  }
+
+  Delete() { remove(this.self); }
+}
+
+class Actor extends ObjectReference {}
+
+/* The player edict: being hit costs a stick of RAM. (The player's health is
+   Infinity, so T_Damage never kills them.) */
+class PlayerScript extends Actor {
+  OnHit() { GSA.ai.hurt(GSA.state()); }
+}
+
+/* A zombie, cop, wraith or moth. Idle wanders; Investigate walks to a point and
+   looks around; Chase and Flee react to the player. Each state turns on one of the
+   native Packages below, which does the walking (and the biting). */
+class MobScript extends Actor {
+  constructor(self) {
+    super(self);
+    const ai = GSA.ai,
+      /* Walk to a point and look around. */
+      lookAt = (x, y) => {
+        self.targetPos = [x, y];
+        self.activePackage = 'Investigate';
+        this.UnregisterForUpdate();
+        this.GoToState('Investigate');
+      },
+      /* Noticed the player: fight or run, depending on the faction. */
+      react = (akViewer, akTarget) => {
+        const a = ai.attitude(self, GSA.state());
+        if (a == 'hostile') { self.enemy = akTarget; this.GoToState('Chase'); }
+        else if (a == 'flee') { self.enemy = akTarget; this.GoToState('Flee'); }
+      };
+
+    this.OnHit = akAggressor => {
+      const st = this.GetState();
+      if (akAggressor && st != 'Chase' && st != 'Flee') lookAt(akAggressor.x, akAggressor.y);
+    };
+    this.OnDeath = () => this.GoToState('Dead');
+
+    this.states = {
+      Idle: {
+        OnBeginState: () => { self.enemy = null; self.activePackage = 'Wander'; },
+        OnGainLOS: react,
+        OnAlert: lookAt
+      },
+
+      Investigate: {
+        OnBeginState: () => { self.activePackage = 'Investigate'; },
+        OnEndState: () => this.UnregisterForUpdate(),
+        OnGainLOS: react,
+        OnAlert: lookAt,
+        OnPackageEnd: () => { self.activePackage = null; this.RegisterForSingleUpdate(3); },
+        OnUpdate: () => this.GoToState('Idle')   /* looked around long enough */
+      },
+
+      Chase: {
+        OnBeginState: () => { self.activePackage = 'Pursue'; },
+        OnAlert: () => {},   /* too busy */
+        OnLostLOS: () => lookAt((self.enemy || self).x, (self.enemy || self).y),
+        OnPackageEnd: () => this.GoToState('Idle')   /* the enemy is gone, or no longer an enemy */
+      },
+
+      Flee: {
+        OnBeginState: () => {
+          self.activePackage = 'Flee';
+          this.UnregisterForUpdate();
+          if (!self.los) this.RegisterForSingleUpdate(3);
+        },
+        OnEndState: () => this.UnregisterForUpdate(),
+        OnAlert: () => {},
+        OnGainLOS: () => this.UnregisterForUpdate(),
+        OnLostLOS: () => this.RegisterForSingleUpdate(3),
+        OnPackageEnd: () => this.GoToState('Idle'),
+        OnUpdate: () => this.GoToState('Idle')   /* out of sight long enough */
+      },
+
+      Dead: {
+        OnBeginState: () => {
+          self.dead = true;
+          self.solid = 'SOLID_NOT';
+          self.activePackage = null;
+          self.enemy = null;
+          ai.spawnDrops(self);
+          this.RegisterForSingleUpdate(15);
+        },
+        OnUpdate: () => this.Delete()   /* the corpse goes away */
+      }
+    };
+    this.GoToState('Idle');
+  }
+}
+
+/* Keeps one mob of base.mob alive at its position. It checks on the mob once a
+   second and, once it is dead or gone, places a new one base.delay seconds later. */
+class SpawnerScript extends ObjectReference {
+  constructor(self) {
+    super(self);
+    this.mob = null;
+    this.states = {
+      Watching: {
+        OnBeginState: () => {
+          this.mob = this.PlaceAtMe(self.base.mob);
+          if (this.mob) this.mob.owner = self;
+          this.RegisterForSingleUpdate(1);
+        },
+        OnUpdate: () => {
+          const m = this.mob;
+          if (!m || m.free || m.dead || m.owner !== self) this.GoToState('Waiting');
+          else this.RegisterForSingleUpdate(1);
+        }
+      },
+      Waiting: {
+        OnBeginState: () => { this.mob = null; this.RegisterForSingleUpdate(self.base.delay); },
+        OnUpdate: () => this.GoToState('Watching')
+      }
+    };
+    this.GoToState('Watching');
+  }
+}
+
+/* A pickup. RAM is counted (and trips the alarm inside the interior); anything
+   else goes into the inventory. An item the player just dropped sits in the
+   Dropped state for a moment so it is not picked straight back up. */
+class PickupScript extends ObjectReference {
+  constructor(self) {
+    super(self);
+    this.states.Dropped = {
+      OnTouch: () => {},
+      OnUpdate: () => this.GoToState('')
+    };
+  }
+
+  OnTouch(other) {
+    if (other.base.type != 'player') return;
+    const s = GSA.state(), e = this.self, key = e.base.key;
+    if (key == 'ram') {
+      s.carry++;
+      if (s.scene == 'int' && !s.alarm) {
+        s.alarm = 1;
+        s.msg = 'Alarm raised';
+        GSA.engine.emit('alarm_raised');
+        GSA.ai.emitSound(s.p.x, s.p.y, Infinity, 100);
+      }
+    } else {
+      s.inv[key] = (s.inv[key] || 0) + 1;
+      s.msg = 'Picked up ' + e.base.name;
+    }
+    this.Delete();
+  }
+}
+
+/* A portal ring. Touching one moves the player between city and interior and
+   advances the mission. It stays disarmed until the player has walked clear of
+   every ring (engine.js), so arriving on one does not bounce straight back. */
+class PortalScript extends ObjectReference {
+  OnTouch(other) {
+    const s = GSA.state(), p = s.p, k = this.self.base.key;
+    if (other !== p || !s.armed || (p.vehicle && k != 'door')) return;
+    s.armed = 0;
+    if (s.scene == 'int') {
+      const o = portalsOf(s.B.source)[k];
+      GSA.engine.setScene(s, 'city');
+      p.x = o[0];
+      p.y = o[1];
+      GSA.engine.emit('out:' + k);
+    } else if (k == 'door') {
+      if (s.step != 2) return;
+      if (s.carry / mission.of >= mission.thr) GSA.engine.emit('deliver');
+      else s.msg = `Need ${Math.ceil(mission.thr * mission.of)} sticks, carrying ${s.carry}`;
+    } else {
+      const v = s.I.portals[k];
+      GSA.engine.setScene(s, 'int');
+      p.x = v[0];
+      p.y = v[1];
+      GSA.engine.emit('in:' + k);
+    }
+  }
+}
+
+/* A plasma bolt (MOVETYPE_FLY). Like Quake's spike: it removes itself when its
+   think time comes, and OnTouch(null) means it hit the world. */
+class PlasmaBoltScript extends ObjectReference {
+  constructor(self) {
+    super(self);
+    this.RegisterForSingleUpdate(1.2);
+  }
+
+  OnUpdate() { this.Delete(); }
+
+  OnTouch(other) {
+    const e = this.self;
+    if (!other) {
+      GSA.render.spawnImpactEffect(e.x, e.y);
+      this.Delete();
+    } else if (other !== e.owner && other.base.type == 'actor') {
+      T_Damage(other, e, e.owner, e.base.damage);
+      this.Delete();
+    }
+  }
+}
+
+/* A crafting station. Activating it brews the first recipe for this kind of station
+   that the player has the ingredients for. */
+class StationScript extends ObjectReference {
+  OnActivate() {
+    const s = GSA.state(), type = this.self.base.key,
+      found = Object.entries(packs.recipes).find(([, r]) => r.station == type && Object.entries(r.needs).every(([k, n]) => (s.inv[k] || 0) >= n));
+    if (!found) { s.msg = 'You are missing ingredients'; return; }
+    const [name, r] = found;
+    for (const k in r.needs) s.inv[k] -= r.needs[k];
+    s.inv[name] = (s.inv[name] || 0) + 1;
+    s.msg = 'Brewed ' + packs.items[name].name;
+  }
+}
+
+/* ---------- Native AI packages (Skyrim) ---------- */
+
+/* A script picks the package (what to do); the package does the walking. A package
+   that finishes or cannot continue sends OnPackageEnd. */
+const steer = (e, s, tx, ty, k, dt) =>
+  GSA.physics.steerTowards(s, e, tx, ty, e.base.speed * (e.slow > 0 ? .4 : 1) * k, dt);
+
+const Packages = {
+  Wander(e, s, dt) {
+    const st = e.packageState;
+    if (!st.goal || (st.dwell = (st.dwell || 0) - dt) <= 0) {
+      const a = Math.random() * 2 * Math.PI, r = Math.random() * (e.base.tetherRadius || 4);
+      st.goal = [e.spawnPoint[0] + Math.sin(a) * r, e.spawnPoint[1] + Math.cos(a) * r];
+      st.dwell = 2 + Math.random() * 3;
+    }
+    steer(e, s, st.goal[0], st.goal[1], .4, dt);
+  },
+
+  Investigate(e, s, dt) {
+    if (!e.targetPos || dist([e.x, e.y], e.targetPos) < .6) {
+      e.targetPos = null;
+      return e.script.dispatch('OnPackageEnd', 'Investigate');
+    }
+    steer(e, s, e.targetPos[0], e.targetPos[1], .7, dt);
+  },
+
+  /* Run at the enemy and bite it, once per attackInterval (attack_finished, as in Quake). */
+  Pursue(e, s, dt) {
+    const t = e.enemy;
+    if (!t || t.dead || !GSA.ai.hostile(e, s)) return e.script.dispatch('OnPackageEnd', 'Pursue');
+    steer(e, s, t.x, t.y, 1, dt);
+    if (s.t >= e.attack_finished && dist([e.x, e.y], [t.x, t.y]) <= e.base.reach) {
+      e.attack_finished = s.t + e.base.attackInterval;
+      T_Damage(t, e, e, e.base.attackPower);
+    }
+  },
+
+  Flee(e, s, dt) {
+    const t = e.enemy;
+    if (!t || t.dead) return e.script.dispatch('OnPackageEnd', 'Flee');
+    const dx = e.x - t.x, dy = e.y - t.y, d = Math.hypot(dx, dy) || 1;
+    steer(e, s, e.x + dx / d * 5, e.y + dy / d * 5, 1.25, dt);
+  }
+};
+
+/* ---------- The frame ---------- */
+
+/* Quake's SV_Physics, over the edicts in the player's scene: first think (the
+   nextthink timers) and see, then move, then touch. A spawner's thinking therefore
+   waits while the player is inside the interior. */
+function sv_physics(s, dt) {
+  s.t += dt;
+  const here = s.edicts.filter(e => !e.free && e.sc == s.scene);
+
+  /* think: OnUpdate when nextthink comes due, and the sight events */
+  for (const e of here) {
+    if (e.nextthink && s.t >= e.nextthink) {
+      e.nextthink = 0;
+      e.script.dispatch('OnUpdate');
+    }
+    if (e.free || e.dead || e.base.type != 'actor') continue;
+    if (e.slow > 0) e.slow -= dt;
+    const was = e.los;
+    e.los = GSA.ai.sees(e, s);
+    if (e.los && !was) e.script.dispatch('OnGainLOS', e, s.p);
+    else if (!e.los && was) e.script.dispatch('OnLostLOS', e, s.p);
+  }
+
+  /* move: the active package, then the movetype */
+  for (const e of here) {
+    if (e.free) continue;
+    if (e.activePackage) Packages[e.activePackage](e, s, dt);
+    if (e.movetype == 'MOVETYPE_FLY') {
+      e.x += e.vx * dt;
+      e.y += e.vy * dt;
+      e.z += e.vz * dt;
+      if (!e.free && GSA.physics.hit(s, e.x, e.y, e.z)) e.script.dispatch('OnTouch', null);
+    } else if (e.movetype == 'MOVETYPE_WALK') {
+      const wall = GSA.physics.mv(s, e, e.vx * dt, e.vy * dt);
+      if (wall) {
+        e.wn = wall;
+        e.wn_time = s.t;
+        if (wall[0]) e.vx = 0;
+        if (wall[1]) e.vy = 0;
+      }
+    }
+  }
+
+  /* touch: every pair of overlapping triggers touches */
+  const solid = here.filter(e => !e.free && e.solid != 'SOLID_NOT');
+  for (let i = 0; i < solid.length; i++) {
+    for (let j = i + 1; j < solid.length; j++) {
+      const a = solid[i], b = solid[j];
+      if (a.free || b.free || a.sc != b.sc || a.solid == 'SOLID_NOT' || b.solid == 'SOLID_NOT') continue;
+      if (dist([a.x, a.y], [b.x, b.y]) > a.radius + b.radius) continue;
+      if (a.script) a.script.dispatch('OnTouch', b);
+      if (!b.free && b.script) b.script.dispatch('OnTouch', a);
+    }
+  }
+}
+
+(window.GSA = window.GSA || {}).scripting = {
+  MAX_EDICTS, Edict, newPool, spawn, remove, T_Damage, Killed, Form, ObjectReference, Actor, Packages, sv_physics,
+  PlayerScript, MobScript, SpawnerScript, PickupScript, PortalScript, StationScript, PlasmaBoltScript
+};
+</script></script>
+		<script>/* render.js — Three.js: static geometry per scene, one mesh per edict that has
+   something to show, the follow camera. Reads the state and never changes it,
+   apart from the camera-shake timer.
+
+   World coordinates are east, north, up (x, y, z), right-handed. Three.js is y-up,
+   so a world point (x, y, z) is drawn at three.js (x, z, -y): east stays +x, up
+   becomes +y, north becomes -z (the way a three.js camera looks by default).
+   Headings are compass bearings, so a model that faces +z in its own space turns to
+   face bearing h with rotation.y = PI - h.
+
+   Edicts that have something to show (actors, items, projectiles, vehicles) own a
+   `.mesh`, created here on first sight and freed with release(e). The player's avatar
+   is the group `pm`, posed from the player's heading, pitch and zscale. */
+
+let ren, sc, cam, grp, beamM, shock, impacts = [];
+const pm = new THREE.Group();
+pm.rotation.order = 'YXZ';   /* turn first, then tilt about the avatar's own x axis */
+
+const init = canvas => {
+  ren = new THREE.WebGLRenderer({ canvas, antialias: true });
+  ren.setSize(W, H, false);
+  sc = new THREE.Scene();
+  sc.add(new THREE.AmbientLight(0xffffff, .7));
+  const dl = new THREE.DirectionalLight(0xffffff, .7);
+  dl.position.set(8, 20, -6);
+  sc.add(dl);
+  cam = new THREE.PerspectiveCamera(50, W / H, .1, 200);
+};
+
+/* The CSS colour tokens, read live so a theme change shows up on the next rebuild. */
+const tok = () => Object.fromEntries(['bg', 'ground', 'bld', 'fg', 'acc', 'cop', 'bad'].map(n => [n, getComputedStyle(document.documentElement).getPropertyValue('--' + n).trim()]));
+
+/* A mesh at a position in the parent's own (three.js) space. Model builders use this. */
+const addMesh = (parent, geo, color, x, y, z) => {
+  const m = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color }));
+  m.position.set(x, y, z);
+  parent.add(m);
+  return m;
+};
+
+/* A mesh at a world position (x east, y north, z up). */
+const put = (parent, geo, color, x, y, z) => addMesh(parent, geo, color, x, z, -y);
+
+const lab = (t, col) => {
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 48;
+  const x = c.getContext('2d');
+  x.font = 'bold 24px sans-serif';
+  x.fillStyle = col;
+  x.textAlign = 'center';
+  x.fillText(t, 128, 32);
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), transparent: true }));
+  s.scale.set(8, 1.5, 1);
+  return s;
+};
+
+/* Rebuild the avatar for a race. */
+const setRace = race => {
+  while (pm.children.length) pm.remove(pm.children[0]);
+  race.build((g, c, x, y, z) => addMesh(pm, g, c, x, y, z));
+};
+
+/* Free an edict's mesh (called when it is removed). */
+const release = e => {
+  if (!e.mesh) return;
+  if (e.mesh.parent) e.mesh.parent.remove(e.mesh);
+  e.mesh.traverse(o => {
+    if (o.geometry) o.geometry.dispose();
+    if (o.material) o.material.dispose();
+  });
+  e.mesh = null;
+};
+
+/* A short-lived ring where a bolt hit a wall. */
+const spawnImpactEffect = (x, y) => {
+  const m = put(grp, new THREE.RingGeometry(.2, .3, 16), '#ffd166', x, y, .06);
+  m.rotation.x = -Math.PI / 2;
+  m.material.transparent = true;
+  impacts.push({ m, t: 0 });
+};
+
+/* Static geometry for the scene the player is in: ground, walls, water, bridges,
+   stations, labels and portal rings. Edict meshes are dropped and recreated by the
+   next draw(). */
+function build(s) {
+  if (grp) sc.remove(grp);
+  grp = new THREE.Group();
+  sc.add(grp);
+  impacts = [];
+  for (const e of s.edicts) e.mesh = null;
+
+  const inI = s.scene == 'int', C = tok(), wh = GSA.physics.WH(s),
+    slab = ([x, y, w, d], h, z, color) => put(grp, new THREE.BoxGeometry(w, h, d), color, x + w / 2, y + d / 2, z);
+  sc.background = new THREE.Color(C.bg);
+  put(grp, new THREE.BoxGeometry(s.size[0], .2, s.size[1]), C.ground, s.size[0] / 2, s.size[1] / 2, -.1);
+  s.walls.forEach(r => slab(r, wh, wh / 2, C.bld));
+
+  if (!inI) {
+    (s.city.water || []).forEach(r => slab(r, .1, .02, '#2f7fd1'));
+    (s.city.bridges || []).forEach(r => slab(r, .12, .06, '#9a7b4f'));
+    (s.city.stations || []).forEach(q => {
+      put(grp, new THREE.CylinderGeometry(.7, .9, 1, 10), '#7c3aed', q.at[0], q.at[1], .5);
+      const l = lab(q.name, C.fg);
+      l.position.set(q.at[0], 2.2, -q.at[1]);
+      grp.add(l);
+    });
+    s.city.sites.forEach(q => {
+      const l = lab(q.name, C.fg);
+      l.position.set(q.r[0] + q.r[2] / 2, wh + 1, -(q.r[1] + q.r[3] / 2));
+      grp.add(l);
+    });
+  }
+  portalList(s).forEach(({ k, at }) => put(grp, new THREE.CylinderGeometry(.8, .8, .08, 20), !inI && k == 'front' ? C.cop : C.acc, at[0], at[1], .05));
+
+  grp.add(pm);
+  beamM = put(grp, new THREE.BoxGeometry(.3, .3, 9), '#7fe3ff', 0, 0, 0);
+  shock = put(grp, new THREE.RingGeometry(.88, 1, 48), '#ffd166', 0, 0, .08);
+  shock.rotation.x = -Math.PI / 2;
+  shock.material.transparent = true;
+  beamM.visible = shock.visible = false;
+  cam.position.set(s.p.x, 11, 9 - s.p.y);
+}
+
+/* What each kind of edict looks like: `make` builds its mesh, `pose` places it
+   every frame. Kinds not listed (portals, spawners, stations) have no mesh. */
+const KIND = {
+  actor: {
+    make: e => put(grp, new THREE.CylinderGeometry(.35, .35, 1.2, 10), e.base.color || '#c33', e.x, e.y, .6),
+    pose: (e, o) => o.position.set(e.x, .6, -e.y)
+  },
+  item: {
+    make: e => put(grp, new THREE.OctahedronGeometry(.4), e.base.color || '#ffd166', e.x, e.y, .7),
+    pose: (e, o) => { o.position.set(e.x, .7, -e.y); o.rotation.y += .04; }
+  },
+  projectile: {
+    make: e => {
+      const o = put(grp, new THREE.SphereGeometry(.15, 8, 6), '#8dff3a', e.x, e.y, e.z);
+      o.material.transparent = true;
+      return o;
+    },
+    /* burns out over its lifetime: the time left until its nextthink */
+    pose: (e, o, s) => {
+      o.position.set(e.x, e.z, -e.y);
+      o.material.opacity = Math.max(0, (e.nextthink - s.t) / 1.2);
+    }
+  },
+  /* drawn by its own base.build(a), like a race's avatar; the model faces +z */
+  vehicle: {
+    make: e => {
+      const g = new THREE.Group();
+      e.base.build((geo, c, x, y, z) => addMesh(g, geo, c, x, y, z));
+      grp.add(g);
+      return g;
+    },
+    pose: (e, o) => {
+      o.position.set(e.x, e.z, -e.y);
+      o.rotation.y = Math.PI - e.heading;
+    }
+  }
+};
+
+function draw(s, Y, Pt, dt) {
+  const p = s.p;
+  if (s.dirty) {
+    build(s);
+    s.dirty = 0;
+  }
+
+  /* avatar */
+  pm.position.set(p.x, p.z, -p.y);
+  pm.visible = !p.vehicle;
+  pm.rotation.y = Math.PI - p.heading;
+  pm.rotation.x = p.pitch;
+  pm.scale.y = p.zscale;
+  pm.traverse(o => {
+    if (o.material) {
+      o.material.transparent = true;
+      o.material.opacity = s.invis > 0 ? .25 : 1;
+    }
+  });
+
+  /* edicts, and the newest shockwave */
+  let wv = null;
+  for (const e of s.edicts) {
+    if (e.free) continue;
+    if (e.base.type == 'wave') wv = e;
+    const kind = KIND[e.base.type];
+    if (!kind) continue;
+    const vis = e.sc == s.scene && !e.dead;
+    if (!e.mesh && vis) {
+      e.mesh = kind.make(e);
+      if (!e.mesh.parent) grp.add(e.mesh);
+    }
+    if (!e.mesh) continue;
+    e.mesh.visible = vis;
+    kind.pose(e, e.mesh, s);
+  }
+
+  /* frost beam, shockwave, impact rings */
+  const ax = Math.sin(Y), ay = Math.cos(Y);
+  beamM.visible = !!s.beam;
+  if (s.beam) {
+    beamM.position.set(p.x + ax * 4.5, p.z + .9, -(p.y + ay * 4.5));
+    beamM.rotation.y = Math.PI - Y;
+  }
+  shock.visible = !!wv;
+  if (wv) {
+    shock.scale.set(wv.radius, wv.radius, 1);
+    shock.position.set(wv.x, .08, -wv.y);
+    shock.material.opacity = 1 - wv.radius / wv.base.max * .8;
+  }
+  for (let i = impacts.length - 1; i >= 0; i--) {
+    const it = impacts[i];
+    it.t += dt;
+    if (it.t >= .3) {
+      grp.remove(it.m);
+      it.m.geometry.dispose();
+      impacts.splice(i, 1);
+    } else {
+      const k = 1 - it.t / .3;
+      it.m.scale.setScalar(k * 4);
+      it.m.material.opacity = k;
+    }
+  }
+
+  /* camera: behind the player along the view bearing, looking at them */
+  const D = 13, cp = Math.cos(Pt);
+  cam.position.lerp(new THREE.Vector3(p.x - Math.sin(Y) * cp * D, Math.sin(Pt) * D + p.z * .5, -(p.y - Math.cos(Y) * cp * D)), .2);
+  if (s.shk > 0) {
+    s.shk -= .016;
+    cam.position.x += (Math.random() - .5) * s.shk * 3;
+    cam.position.y += (Math.random() - .5) * s.shk * 3;
+  }
+  cam.lookAt(p.x, p.z * .5 + .5, -p.y);
+  ren.render(sc, cam);
+}
+
+(window.GSA = window.GSA || {}).render = { init, draw, setRace, release, spawnImpactEffect, tok };
+</script></script>
+		<script>/* ui.js — HUD text, weapon wheel, inventory modal, item actions, and the keys
+   that drive them (Tab, 1-9, I). Owns the 2D canvas wheel and the HTML bag
+   overlay. Never touches the Three.js scenegraph. */
+
+const weapons = (s) => {
+  const w = [];
+  for (const k of s.race.innate_weapons || []) {
+    const d = packs.innate_weapons[k];
+    if (d) w.push({ id: k, ...d, name: d.name || niceName(k) });
+  }
+  for (const k in s.inv) {
+    const d = packs.items[k];
+    if (s.inv[k] > 0 && d && d.type == 'weapon') w.push({ id: k, ...d });
+  }
+  return w;
+};
+
+const curWeapon = (s) => {
+  const w = weapons(s);
+  return w.find(x => x.id == s.wpn) || w[0];
+};
+
+const SLOWMO = .1;
+
+/* Weapon wheel: hold Tab, move the mouse toward a slot, release Tab to equip.
+   Time slows while it is open and the camera stays put. Number keys jump to a slot. */
+const WR = 150, WRI = 52, WCL = WR * .75;
+let wcv = null,
+  wg = null,
+  wtok = null;
+function ensureWheel() {
+  if (wcv) return;
+  wcv = document.createElement('canvas');
+  wcv.width = W;
+  wcv.height = H;
+  wcv.style.cssText = 'position:fixed;display:none;pointer-events:none;z-index:10';
+  document.body.appendChild(wcv);
+  wg = wcv.getContext('2d');
+}
+function wheelOpen() {
+  if (!S || S.bad || S.step >= 3 || S.wheel || S.bag) return;
+  ensureWheel();
+  const list = weapons(S);
+  if (!list.length) {
+    S.msg = 'You have no weapons';
+    return;
+  }
+  const cur = curWeapon(S);
+  S.wheel = { list, x: 0, y: 0, sel: Math.max(0, list.findIndex(w => w.id == cur.id)) };
+  wtok = tok();
+  wcv.style.display = 'block';
+}
+
+function wheelMove(dx, dy) {
+  const w = S.wheel, n = w.list.length;
+  w.x += dx;
+  w.y += dy;
+  const m = Math.hypot(w.x, w.y);
+  if (m > WCL) {
+    w.x *= WCL / m;
+    w.y *= WCL / m
+  }
+  if (m > 20 && n > 1) {
+    const a = (Math.atan2(w.x, -w.y) + 2 * Math.PI) % (2 * Math.PI);
+    w.sel = Math.round(a / (2 * Math.PI / n)) % n;
+  }
+}
+
+function wheelPick(i) {
+  const w = S && S.wheel;
+  if (w && i < w.list.length) w.sel = i;
+}
+
+/* Mouse wheel: move the selection while the wheel is open, otherwise equip the next weapon. */
+function cycleWeapon(d) {
+  if (!S || S.bad) return;
+  const w = S.wheel, list = w ? w.list : weapons(S), n = list.length;
+  if (!n) return;
+  if (w) w.sel = (w.sel + d + n) % n;
+  else S.wpn = list[(Math.max(0, list.findIndex(x => x.id == curWeapon(S).id)) + d + n) % n].id;
+}
+
+function wheelClose(commit) {
+  const w = S && S.wheel;
+  if (!w) return;
+  if (commit) S.wpn = w.list[w.sel].id;
+  S.wheel = null;
+  wcv.style.display = 'none';
+}
+
+function wheelDraw() {
+  const w = S && S.wheel;
+  if (!w) return;
+  const r = cv.getBoundingClientRect(),
+    n = w.list.length,
+    cx = W / 2,
+    cy = H / 2,
+    T = 2 * Math.PI / n;
+  Object.assign(wcv.style, { left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px' });
+  wg.clearRect(0, 0, W, H);
+  wg.globalAlpha = .4;
+  wg.fillStyle = wtok.bg;
+  wg.fillRect(0, 0, W, H);
+  wg.textAlign = 'center';
+  w.list.forEach((it, i) => {
+    const on = i == w.sel,
+      c = i * T - Math.PI / 2,
+      g = n > 1 ? .04 : 0;
+    wg.beginPath();
+    wg.arc(cx, cy, WR, c - T / 2 + g, c + T / 2 - g);
+    wg.arc(cx, cy, WRI, c + T / 2 - g, c - T / 2 + g, true);
+    wg.closePath();
+    wg.globalAlpha = on ? .95 : .78;
+    wg.fillStyle = on ? wtok.acc : wtok.bg;
+    wg.fill();
+    wg.globalAlpha = on ? 1 : .5;
+    wg.strokeStyle = wtok.fg;
+    wg.lineWidth = on ? 3 : 1;
+    wg.stroke();
+    /* name wrapped to short lines, then "slot  type" underneath */
+    const lines = [];
+    for (const word of it.name.split(' ')) {
+      const last = lines.length - 1;
+      if (last >= 0 && (lines[last] + ' ' + word).length <= 12) lines[last] += ' ' + word;
+      else lines.push(word);
+    }
+    const rr = (WR + WRI) / 2,
+      lx = cx + Math.cos(c) * rr,
+      ly = cy + Math.sin(c) * rr - lines.length * 7;
+    wg.globalAlpha = 1;
+    wg.fillStyle = on ? wtok.bg : wtok.fg;
+    wg.font = 'bold 14px sans-serif';
+    lines.forEach((t, k) => wg.fillText(t, lx, ly + k * 16));
+    wg.font = '11px sans-serif';
+    wg.fillText((i + 1) + '  ' + it.weapon_type, lx, ly + lines.length * 16 + 2);
+  });
+  wg.globalAlpha = 1;
+  wg.fillStyle = wtok.fg;
+  wg.font = 'bold 18px sans-serif';
+  wg.fillText(w.list[w.sel].name, cx, cy + WR + 26);
+  wg.beginPath();
+  wg.arc(cx + w.x, cy + w.y, 5, 0, 2 * Math.PI);
+  wg.fill();
+  wg.strokeStyle = wtok.bg;
+  wg.lineWidth = 2;
+  wg.stroke();
+}
+
+/* Items: use and drop. Weapons equip, items with a `use` effect apply it (invis:
+   seconds of invisibility) and are consumed unless use.keep. Dropped items become
+   pickups in the scene they were dropped in, with a short delay before they can
+   be picked up again. */
+function useItem(s, k) {
+  const d = packs.items[k];
+  if (!d || !(s.inv[k] > 0)) return '';
+  if (d.type == 'weapon') {
+    s.wpn = k;
+    return 'Equipped ' + d.name;
+  }
+  const u = d.use;
+  if (!u) return '';
+  if (u.invis) s.invis = u.invis;
+  if (!u.keep) s.inv[k]--;
+  return u.msg || 'Used ' + d.name;
+}
+
+function dropItem(s, k) {
+  if (!(s.inv[k] > 0)) return false;
+  s.inv[k]--;
+  const p = s.p;
+  let x = p.x, y = p.y;
+  if (!p.vehicle) {
+    const nx = p.x + Math.sin(p.heading) * 1.6, ny = p.y + Math.cos(p.heading) * 1.6;
+    if (nx > .5 && nx < s.size[0] - .5 && ny > .5 && ny < s.size[1] - .5 && !GSA.physics.hit(s, nx, ny, 0)) {
+      x = nx;
+      y = ny;
+    }
+  }
+  GSA.engine.addItem(k, x, y, s.scene, 1);
+  s.msg = 'Dropped ' + packs.items[k].name;
+  return true;
+}
+
+/* Inventory screen: press I. The game is paused while it is open. Up/Down (or W/S)
+   choose, Enter uses, Backspace drops one, I or Esc closes; the buttons and rows
+   work with the mouse. */
+const mk = (tag, css, txt) => {
+  const x = document.createElement(tag);
+  if (css) x.style.cssText = css;
+  if (txt != null) x.textContent = txt;
+  return x;
+};
+const BTN = 'flex:1;padding:6px 8px;font:inherit;color:var(--fg);background:transparent;border:1px solid var(--fg);cursor:pointer',
+  ROW = 'display:flex;align-items:center;gap:8px;padding:5px 8px;cursor:pointer';
+const bagEl = mk('div', 'position:fixed;display:none;z-index:11;align-items:center;justify-content:center;background:rgba(0,0,0,.5);font:14px/1.4 sans-serif'),
+  bagPanel = mk('div', 'width:min(340px,88%);max-height:90%;overflow:auto;box-sizing:border-box;padding:14px 16px;background:var(--bg);color:var(--fg);border:2px solid var(--fg)'),
+  bagList = mk('div', 'margin:10px 0'),
+  bagMsg = mk('div', 'min-height:1.4em;margin-bottom:8px'),
+  bagBtns = mk('div', 'display:flex;gap:8px'),
+  bagUseB = mk('button', BTN, 'Use'),
+  bagDropB = mk('button', BTN, 'Drop'),
+  bagCloseB = mk('button', BTN, 'Close');
+[bagUseB, bagDropB, bagCloseB].forEach(b => {
+  b.tabIndex = -1;
+  b.onmousedown = e => e.preventDefault();
+  bagBtns.appendChild(b);
+});
+[mk('div', 'font-weight:bold;font-size:18px', 'Inventory'), bagList, bagMsg, bagBtns,
+  mk('div', 'margin-top:10px;opacity:.7;font-size:12px', 'Up and down to choose, Enter to use, Backspace to drop, I to close')
+].forEach(x => bagPanel.appendChild(x));
+bagEl.appendChild(bagPanel);
+document.body.appendChild(bagEl);
+bagUseB.onclick = () => bagUse();
+bagDropB.onclick = () => bagDrop();
+bagCloseB.onclick = () => bagClose(true);
+
+const bagItems = () => Object.keys(S.inv).filter(k => S.inv[k] > 0 && packs.items[k]);
+
+function bagOpen() {
+  if (!S || S.bad || S.bag || S.wheel) return;
+  S.bag = { sel: 0, msg: '', lock: document.pointerLockElement === cv };
+  if (S.bag.lock && document.exitPointerLock) document.exitPointerLock();
+  bagEl.style.display = 'flex';
+  bagRender();
+}
+
+function bagClose(relock) {
+  const b = S && S.bag;
+  if (!b) return;
+  S.bag = null;
+  bagEl.style.display = 'none';
+  if (relock && b.lock && cv.requestPointerLock) {
+    const r = cv.requestPointerLock();
+    if (r && r.catch) r.catch(() => {});
+  }
+}
+
+function bagRender() {
+  const b = S.bag, ks = bagItems();
+  b.sel = Math.max(0, Math.min(b.sel, ks.length - 1));
+  bagList.innerHTML = '';
+  if (!ks.length) bagList.appendChild(mk('div', 'opacity:.7', 'Nothing here yet. Pick things up around the map.'));
+  const cw = curWeapon(S);
+  ks.forEach((k, i) => {
+    const d = packs.items[k], n = S.inv[k],
+      row = mk('div', ROW + (i == b.sel ? ';background:var(--acc);color:var(--bg)' : '')),
+      sw = mk('span', 'width:12px;height:12px;flex:none;border:1px solid currentColor');
+    if (d.color) sw.style.background = d.color;
+    row.appendChild(sw);
+    row.appendChild(mk('span', 'flex:1', d.name + (cw && cw.id == k ? ' (equipped)' : '')));
+    if (n > 1) row.appendChild(mk('span', '', '\u00d7' + n));
+    row.onclick = () => {
+      b.sel = i;
+      b.msg = '';
+      bagRender();
+    };
+    bagList.appendChild(row);
+  });
+  const k = ks[b.sel], d = k && packs.items[k], canUse = !!d && (d.type == 'weapon' || !!d.use);
+  bagUseB.textContent = d && d.type == 'weapon' ? 'Equip' : 'Use';
+  bagUseB.disabled = !canUse;
+  bagUseB.style.opacity = canUse ? 1 : .4;
+  bagDropB.disabled = !k;
+  bagDropB.style.opacity = k ? 1 : .4;
+  bagMsg.textContent = b.msg;
+}
+
+function bagStep(d) {
+  const b = S.bag, n = bagItems().length;
+  if (!n) return;
+  b.sel = (b.sel + d + n) % n;
+  b.msg = '';
+  bagRender();
+}
+
+function bagUse() {
+  const b = S.bag, k = bagItems()[b.sel];
+  if (!k) return;
+  const m = useItem(S, k);
+  if (m) S.msg = m;
+  b.msg = m || packs.items[k].name + " can't be used on its own";
+  bagRender();
+}
+
+function bagDrop() {
+  const b = S.bag, k = bagItems()[b.sel];
+  if (!k) return;
+  dropItem(S, k);
+  b.msg = 'Dropped ' + packs.items[k].name;
+  bagRender();
+}
+
+/* Returns true if the key was a bag key. */
+function bagKey(k) {
+  if (k == 'i' || k == 'escape') bagClose(true);
+  else if (k == 'arrowup' || k == 'w') bagStep(-1);
+  else if (k == 'arrowdown' || k == 's') bagStep(1);
+  else if (k == 'enter') bagUse();
+  else if (k == 'backspace' || k == 'delete') bagDrop();
+  else return false;
+  return true;
+}
+
+function bagDraw() {
+  if (!(S && S.bag)) return;
+  const r = cv.getBoundingClientRect();
+  Object.assign(bagEl.style, { left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px' });
+}
+
+/* The text overlay: race, heat, RAM, weapon, items, mission steps and the last message. */
+function hud(s) {
+  const n = Math.ceil(s.heat),
+    stars = '\u2605'.repeat(n) + '\u2606'.repeat(5 - n),
+    items = Object.entries(s.inv).filter(e => e[1]).map(e => packs.items[e[0]].name + ' x' + e[1]).join(', ') || 'none',
+    steps = mission.steps.map((m, i) => (i < s.step ? '[done] ' : i == s.step ? '[now]  ' : '[next] ') + m.t.replace('{source}', s.B.source.name).replace('{dest}', s.B.dest.name));
+  document.querySelector('#hud').textContent =
+    `${s.race.name}   Heat ${stars}   RAM carried ${s.carry}/${mission.of}   Interior: ${s.interior}\n` +
+    `Weapon: ${(curWeapon(s) || { name: 'none' }).name}   [hold Tab] wheel   [I] bag   Items: ${items}${s.invis > 0 ? '   Invisible ' + Math.ceil(s.invis) + 's' : ''}\n` +
+    steps.join('\n') +
+    (s.step >= 3 ? `\nMission complete: ${s.carry}/${mission.of} sticks delivered.` : '') +
+    (s.msg ? '\n' + s.msg : '');
+}
+
+/* Keys for the bag and wheel. (Game keys live in conf.js.) */
+addEventListener('keydown', e => {
+  if (e.repeat || !S) return;
+  const k = e.key.toLowerCase(), plain = !e.altKey && !e.ctrlKey && !e.metaKey;
+  if (S.bag) { if (bagKey(k)) e.preventDefault(); }
+  else if (k == 'i' && plain) bagOpen();
+  if (k == 'tab' && plain) {
+    wheelOpen();
+    e.preventDefault();
+  }
+  if (/^[1-9]$/.test(k)) wheelPick(+k - 1);
+});
+addEventListener('keyup', e => { if (e.key == 'Tab') wheelClose(true); });
+addEventListener('blur', () => wheelClose(false));
+
+(window.GSA = window.GSA || {}).ui = {
+  weapons,
+  curWeapon,
+  cycleWeapon,
+  useItem,
+  dropItem,
+  wheelOpen,
+  wheelMove,
+  wheelPick,
+  wheelClose,
+  wheelDraw,
+  bagOpen,
+  bagClose,
+  bagStep,
+  bagDraw,
+  hud,
+  slowmo: SLOWMO
+};
+</script></script>
+		<script>/* engine.js — game state, the per-frame update, and the main loop. It knows
+   nothing about how the player moves or what a car is: that is data/ (see
+   data/mario64.js and data/gtav.js).
+
+   Load order: bus, inputs, conf, packs, site, physics, ai, scripting, data/*,
+   render, ui, engine. (render and ui may come before data/ too.) Globals shared
+   with other files: $, cv, W, H and S (the current state), plus spawn(), remove()
+   and T_Damage() from scripting.js. The rest is reached through GSA.*.
+
+   Coordinates are east, north, up (x, y, z), right-handed. The camera yaw Y is a
+   compass bearing: forward is (sin Y, cos Y).
+
+   The world is S.edicts, the flat entity pool (see scripting.js). The player is
+   edict 0, also reachable as S.p. Every edict has a scene `sc` ('city' or 'int');
+   only the player's scene is simulated.
+
+   Hooks for data files:
+     PlayerPreThink(self, dt)   global function; runs first each frame (player movement)
+     bus 'start'                emitted after the world is populated (place vehicles, etc.) */
+
+const $ = s => document.querySelector(s),
+  cv = $('#c'),
+  W = 640,
+  H = 400;
+let S, opts, Y = 0, Pt = .9, subscribed = [];
+GSA.render.init(cv);
+
+cv.onclick = () => cv.requestPointerLock && cv.requestPointerLock();
+addEventListener('mousemove', e => {
+  if (!S || S.bag) return;
+  if (S.wheel) return GSA.ui.wheelMove(e.movementX, e.movementY);
+  if (document.pointerLockElement === cv || e.buttons) {
+    Y += e.movementX * .003;
+    Pt = Math.max(.2, Math.min(1.4, Pt + e.movementY * .003));
+  }
+});
+
+/* ---------- Events and mission ---------- */
+
+/* The alarm API handed to event subscribers: raise the heat, capped at 3 from sites. */
+const heat = d => {
+  d *= S.race.alarmMult;
+  const c = Math.max(0, Math.min(d, 3 - S.hs));
+  S.hs += c;
+  S.heat = Math.min(5, S.heat + c);
+};
+
+/* Publish an engine event. Mission stepping is engine-internal on purpose. */
+function emit(name) {
+  const st = mission.steps[S.step];
+  if (st && st.ev == name && (!st.ok || st.ok(S))) S.step++;
+  GSA.bus.emit(name, { S, heat });
+}
+
+/* Switch between the city and the interior; the walls and bounds follow. */
+function setScene(s, name) {
+  const inI = name == 'int';
+  s.scene = name;
+  s.p.sc = name;
+  s.walls = inI ? s.I.walls : s.city.sites.map(q => q.r);
+  s.size = inI ? s.I.size : s.city.size;
+  s.dirty = 1;
+}
+
+/* A pickup edict. A cooldown (seconds) keeps it from being picked up at once. */
+function addItem(key, x, y, sc, cooldown = 0) {
+  const def = packs.items[key] || { name: 'RAM stick', color: '#ffd166' },
+    e = spawn({ base: { type: 'item', key, name: def.name, color: def.color }, x, y, z: .5, sc, radius: .45, solid: 'SOLID_TRIGGER', script: PickupScript });
+  if (e && cooldown) {
+    e.script.GoToState('Dropped');
+    e.script.RegisterForSingleUpdate(cooldown);
+  }
+  return e;
+}
+
+/* ---------- Start ---------- */
+
+function start(o = {}) {
+  GSA.ui.wheelClose(false);
+  GSA.ui.bagClose(false);
+  for (const [k, fn] of subscribed) GSA.bus.off(k, fn);
+  subscribed = [];
+  opts = { ...opts, ...o };
+  const city = packs.city[opts.city],
+    I = packs.interiors[opts.interior],
+    race = packs.races[opts.race],
+    B = bindSite(mission, city);
+  GSA.render.setRace(race);
+
+  S = {
+    city, I, B, race, interior: opts.interior, log: [...B.log],
+    scene: 'city', walls: null, size: null,
+    wpn: null, wheel: null, bag: null,
+    inv: { ...(race.inventory || {}) }, invis: 0,
+    edicts: GSA.scripting.newPool(),
+    heat: 0, hs: 0, t: 1, carry: 0, step: 0, armed: 1, cd: 0, msg: '', dirty: 1, alarm: 0, beam: 0, shk: 0
+  };
+
+  /* Edict 0 is the player. Its movement fields belong to whatever PlayerPreThink sets up. */
+  const P = S.p = S.edicts[0];
+  Object.assign(P, {
+    free: false, base: { type: 'player', race: race.name }, health: Infinity,
+    x: (city.spawn || [22, 13])[0], y: (city.spawn || [22, 13])[1], heading: 0, radius: .35,
+    movetype: 'MOVETYPE_WALK', solid: 'SOLID_TRIGGER', v_angle: [Pt, Y, 0]
+  });
+  P.script = new PlayerScript(P);
+  setScene(S, 'city');
+
+  const bad = !B.ok || !conforms(I, 'data_center');
+  S.log.push(`interior "${opts.interior}" ${conforms(I, 'data_center') ? 'conforms to' : 'does NOT conform to'} data_center`);
+  $('#log').textContent = S.log.join('\n');
+  if (bad) {
+    S.bad = 1;
+    $('#hud').textContent = 'Cannot start: see log below.';
+    return;
+  }
+
+  /* Populate the world. Both scenes' portals exist from the start; edicts of the
+     other scene simply do not run. */
+  for (const sc of ['city', 'int'])
+    for (const { k, at } of portalList(S, sc))
+      spawn({ base: { type: 'portal', key: k }, x: at[0], y: at[1], sc, radius: .55, solid: 'SOLID_TRIGGER', script: PortalScript });
+  for (const q of city.stations || [])
+    spawn({ base: { type: 'station', key: q.type, name: q.name }, x: q.at[0], y: q.at[1], sc: 'city', radius: .9, script: StationScript });
+  for (const i of city.items || []) addItem(i.k, i.at[0], i.at[1], 'city');
+  for (const sp of city.spawners || [])
+    spawn({ base: { type: 'spawner', ...sp }, x: sp.at[0], y: sp.at[1], sc: 'city', script: SpawnerScript });
+  for (const [x, y] of I.ram) addItem('ram', x, y, 'int');
+  for (const [x, y] of I.enemies) GSA.ai.spawnMob('zombie', x, y, { sc: 'int' });
+
+  /* The scripter API: missions and city definitions call these on the state. */
+  Object.assign(S, {
+    emitSound: GSA.ai.emitSound, spawnMob: GSA.ai.spawnMob, T_Damage, Killed,
+    getMobsInRadius: GSA.ai.getMobsInRadius, getNearestMob: GSA.ai.getNearestMob, spawn, remove
+  });
+  for (const k in I.script) subscribed.push([k, GSA.bus.on(k, I.script[k])]);
+  emit('start');
+}
+
+/* ---------- Per-frame steps ---------- */
+
+/* Fire the equipped weapon (melee, cone or bolt). */
+function fire(s, dt) {
+  const p = s.p, ai = GSA.ai, inp = GSA.inputs, w = GSA.ui.curWeapon(s),
+    ax = Math.sin(Y), ay = Math.cos(Y),
+    held = inp.pressed('attack') && !s.wheel,
+    tap = inp.tapped('attack') && !s.wheel,
+    targets = ai.combatTargets(s),
+    rel = m => {
+      const vx = m.x - p.x, vy = m.y - p.y, d = Math.hypot(vx, vy) || 1e-9;
+      return { m, vx, vy, d, dot: (vx * ax + vy * ay) / d };
+    };
+  s.beam = 0;
+  if (!w) return;
+
+  if (w.weapon_type == 'melee' && tap) {
+    const t = targets.map(rel).filter(o => o.d < w.range + .7 && o.dot > 0).sort((a, b) => a.d - b.d)[0];
+    if (t) {
+      T_Damage(t.m, p, p, w.damage);
+      if (w.knockback && !t.m.dead) GSA.physics.shove(s, t.m, t.vx / t.d * w.knockback * 1.5, t.vy / t.d * w.knockback * 1.5);
+    }
+    ai.emitSound(p.x, p.y, 10, 3);
+  } else if (w.weapon_type == 'cone' && held) {
+    s.beam = 1;
+    for (const o of targets.map(rel)) {
+      if (o.d < w.range && o.dot > Math.cos(w.angle)) {
+        T_Damage(o.m, p, p, w.dps * dt);
+        o.m.slow = w.slow;
+      }
+    }
+  } else if (w.weapon_type == 'bolt' && tap) {
+    spawn({
+      base: { type: 'projectile', key: 'plasma_bolt', damage: w.damage },
+      x: p.x, y: p.y, z: .9, vx: ax * w.speed, vy: ay * w.speed, radius: .2, owner: p,
+      movetype: 'MOVETYPE_FLY', solid: 'SOLID_TRIGGER', script: PlasmaBoltScript
+    });
+    ai.emitSound(p.x, p.y, 10, 3);
+  }
+}
+
+/* Cops: keep min(3, ceil(heat)) of them in the city, spawning at the site's front
+   door; heat cools off when none are close (or you are invisible), and cops leave
+   when it hits zero or they have lost you. */
+function stepCops(s, dt) {
+  const p = s.p, front = portalsOf(s.B.source).front,
+    cops = GSA.ai.live(s).filter(m => m.faction == 'cops'),
+    want = Math.min(3, Math.ceil(s.heat));
+  while (cops.length < want) {
+    const m = GSA.ai.spawnMob('cop', front[0] + cops.length * 1.5, front[1]);
+    if (!m) break;
+    cops.push(m);
+  }
+  const near = cops.some(m => m.script.GetState() == 'Chase' || dist([m.x, m.y], [p.x, p.y]) < 9);
+  if (s.invis > 0 || !near) s.heat = Math.max(0, s.heat - .12 * dt);
+  for (const m of cops) if (s.heat == 0 || (!near && dist([m.x, m.y], [p.x, p.y]) > 40)) remove(m);
+}
+
+/* One simulation step. */
+function upd(dt) {
+  const s = S, p = s.p;
+  s.cd -= dt;
+  if (s.invis > 0) s.invis -= dt;
+
+  /* Quake: the engine sets the view angles, then the progs think for the player */
+  p.v_angle = [Pt, Y, 0];
+  if (typeof PlayerPreThink == 'function') PlayerPreThink(p, dt);
+
+  fire(s, dt);
+
+  /* portals re-arm once the player is clear of every ring */
+  if (!s.armed && portalList(s).every(q => dist(q.at, [p.x, p.y]) > 1.5)) s.armed = 1;
+
+  /* heat */
+  if (s.scene == 'city') stepCops(s, dt);
+  else if (s.I.heatPolicy == 'ticks') s.heat = Math.max(0, s.heat - .12 * dt);
+
+  GSA.scripting.sv_physics(s, dt);
+}
+
+/* ---------- One-shot commands (bound in conf.js) ---------- */
+
+/* E, the use key: activate the vehicle you are in, else the nearest thing within
+   reach that handles OnActivate (a crafting station, a car). */
+function interact() {
+  if (!S || S.bad || S.bag || S.wheel) return;
+  const p = S.p, d = e => dist([e.x, e.y], [p.x, p.y]),
+    target = p.vehicle || S.edicts
+      .filter(e => !e.free && e.sc == S.scene && e.script && e.script.handles('OnActivate') && d(e) < 3)
+      .sort((a, b) => d(a) - d(b))[0];
+  if (target) target.script.dispatch('OnActivate', p);
+}
+
+Object.assign(GSA.inputs.handlers, {
+  exit: interact,
+  item_use: () => { const m = S && GSA.ui.useItem(S, 'invisibility_potion'); if (m) S.msg = m; },
+  item_prev: () => S && S.bag && GSA.ui.bagStep(-1),
+  item_next: () => S && S.bag && GSA.ui.bagStep(1),
+  weapon_prev: () => S && GSA.ui.cycleWeapon(-1),
+  weapon_next: () => S && GSA.ui.cycleWeapon(1)
+});
+
+/* ---------- Main loop ---------- */
+
+let last = performance.now();
+(function frame(t) {
+  const dt = Math.max(Math.min(.05, (t - last) / 1e3), 0);
+  last = t;
+  if (S && !S.bad) {
+    if (S.step < 3 && !S.bag) upd(S.wheel ? dt * GSA.ui.slowmo : dt);
+    GSA.render.draw(S, Y, Pt, dt);
+    GSA.ui.hud(S);
+  }
+  GSA.inputs.endFrame();
+  GSA.ui.wheelDraw();
+  GSA.ui.bagDraw();
+  requestAnimationFrame(frame);
+})(last);
+
+Object.assign(window.GSA, {
+  packs, IFACE, mission, bindSite, conforms,
+  engine: { addItem, emit, setScene },
+  state: () => S,
+  start
+});
+start({ city: 'sample', race: 'nord', interior: 'stock' });
+</script></script>
+		<script>/* data/mario64.js — Super Mario 64 movement for the player.
+
+   This is a QuakeC PlayerPreThink: the engine calls it every frame, before anything
+   moves, with the player edict. It reads the buttons and the camera (self.v_angle),
+   works out the player's velocity (vx, vy) and vertical motion (z, vz), and returns.
+   The engine then moves the player with collision (MOVETYPE_WALK) and runs touches.
+   It uses only edict fields and the engine builtins in physics.js (RC, WH), so a
+   different file can replace it with different movement.
+
+   Moves: jump chain (single, double, triple by jumping again as you land while moving),
+   long jump (crouch + jump while moving), backflip (crouch + jump standing), side flip
+   (jump while reversing), wall kick, ground pound (crouch in the air), dive (X), slide.
+   Buildings and walls can be stood on. Also here, because they belong to these moves:
+   the ground-pound shockwave, the dive attack, and footsteps.
+
+   It leaves two fields for the renderer: self.pitch (nose-down tilt) and self.zscale.
+   Races (packs.races) supply speed, gravity and jumpV. Needs data/ loaded after
+   physics.js and scripting.js, before engine.js. */
+(() => {
+  const { RC, WH } = GSA.physics;
+
+  const appr = (p, tx, ty, d) => {
+    const dx = tx - p.vx, dy = ty - p.vy, m = Math.hypot(dx, dy);
+    if (m <= d) {
+      p.vx = tx;
+      p.vy = ty
+    } else {
+      p.vx += dx / m * d;
+      p.vy += dy / m * d
+    }
+  };
+
+  /* Movement kit. `inp` is { mx, my, jump, jumpHeld, crouch, crouchTap, dive }: the wanted
+     velocity plus this frame's button taps. It sets p.vx, p.vy, p.z, p.vz and the state
+     machine p.st (ground, air, hang, slam, dive, slide), and returns true on the frame
+     the player lands. The engine moves p.x and p.y. */
+  function kit(s, dt, inp) {
+    const { mx, my, jump: jd, crouch: cr, crouchTap: cpp, dive: dvp } = inp, ws = s.walls,
+      p = s.p, r = s.race, sp = r.speed, top = WH(s),
+      wl = Math.hypot(mx, my),
+      u = Math.hypot(p.vx, p.vy),
+      flr = () => p.z >= top - .2 && RC(p.x, p.y, ws) ? top : 0,
+      launch = (vy, spin, ctl, cut) => {
+        p.vz = vy;
+        p.st = 'air';
+        p.ctl = ctl;
+        p.cut = cut;
+        p.flip = 0;
+        p.spin = spin * 2 * Math.PI / (2 * vy / r.gravity)
+      };
+    if (wl && (p.st == 'ground' || p.st == 'air')) p.heading = Math.atan2(mx, my);
+    const fx = Math.sin(p.heading), fy = Math.cos(p.heading),
+      f0 = flr(),
+      gnd = p.z <= f0 && p.vz <= 0;
+    let landed = false;
+    if (gnd) {
+      p.land += dt;
+      if (p.st == 'slide') {
+        appr(p, 0, 0, 14 * dt);
+        if (u < 1.5) p.st = 'ground'
+      } else {
+        const k = cr ? .35 : 1;
+        appr(p, mx * k, my * k, (wl ? 45 : 32) * dt)
+      }
+      if (jd) {
+        const mov = u > sp * .55,
+          rev = wl && u > 1 && (p.vx * mx + p.vy * my) / (u * wl) < -.3;
+        if (cr && mov) {
+          const v = Math.max(u, sp) * 1.8;
+          p.vx = fx * v;
+          p.vy = fy * v;
+          p.chain = 0;
+          launch(r.jumpV * .8, 0, .15, 0)
+        } else if (cr) {
+          p.vx = -fx * sp * .5;
+          p.vy = -fy * sp * .5;
+          p.chain = 0;
+          launch(r.jumpV * 1.45, -1, .35, 0)
+        } else if (rev && mov) {
+          p.vx = mx / wl * sp * .9;
+          p.vy = my / wl * sp * .9;
+          p.heading = Math.atan2(mx, my);
+          p.chain = 0;
+          launch(r.jumpV * 1.3, 1, .3, 0)
+        } else {
+          const n = p.land < .25 && mov ? p.chain : 0,
+            b = [1, 1.05, 1.25][n];
+          p.vx *= b;
+          p.vy *= b;
+          p.chain = n < 2 ? n + 1 : 0;
+          launch(r.jumpV * [1, 1.2, 1.55][n], n == 2 ? 1 : 0, .6, n < 2 ? 1 : 0)
+        }
+      } else {
+        p.vz = 0;
+        p.z = f0
+      }
+    } else {
+      if (p.st == 'ground' || p.st == 'slide') {
+        p.st = 'air';
+        p.ctl = .6;
+        p.cut = 0;
+        p.chain = 0
+      }
+      if (p.st == 'air') {
+        if (jd && s.t - p.wn_time < .2 && p.wn) {
+          const v = Math.max(6, sp * 1.3);
+          p.vx = p.wn[0] * v;
+          p.vy = p.wn[1] * v;
+          p.heading = Math.atan2(p.wn[0], p.wn[1]);
+          p.wn_time = -1;
+          p.chain = 0;
+          launch(r.jumpV * 1.15, 0, .5, 0)
+        } else if (cpp && p.z > f0 + .4) {
+          p.st = 'hang';
+          p.tm = .25;
+          p.vz = 0;
+          p.vx = p.vy = 0;
+          p.pound = 1;
+          p.flip = 0;
+          p.spin = 2 * Math.PI / .25
+        } else if (dvp) {
+          const v = Math.max(u, sp) * 1.7;
+          p.vx = fx * v;
+          p.vy = fy * v;
+          p.vz = Math.min(p.vz, 1.5);
+          p.st = 'dive';
+          p.dh = 0;
+          p.spin = 0;
+          p.flip = 0
+        }
+      }
+      if (p.st == 'air') {
+        if (p.cut && !inp.jumpHeld && p.vz > 0) {
+          p.vz *= .5;
+          p.cut = 0
+        }
+        if (wl) {
+          const m0 = Math.hypot(p.vx, p.vy);
+          p.vx += mx / wl * 20 * p.ctl * dt;
+          p.vy += my / wl * 20 * p.ctl * dt;
+          const m = Math.hypot(p.vx, p.vy), cap = Math.max(m0, sp);
+          if (m > cap) {
+            p.vx *= cap / m;
+            p.vy *= cap / m
+          }
+        } else {
+          p.vx *= 1 - .15 * dt;
+          p.vy *= 1 - .15 * dt
+        }
+      } else if (p.st == 'hang') p.vx = p.vy = 0
+    }
+    if (!gnd || p.vz > 0) {
+      const h0 = p.z,
+        fl = h0 >= top - .2 && RC(p.x, p.y, ws) ? top : 0;
+      if (p.st == 'hang') {
+        p.tm -= dt;
+        p.vz = 0;
+        if (p.tm <= 0) {
+          p.st = 'slam';
+          p.vz = -20;
+          p.spin = 0;
+          p.flip = 0
+        }
+      } else if (p.st == 'slam') p.vz = -20;
+      else p.vz -= r.gravity * dt;
+      if (p.st == 'air' && s.t - p.wn_time < .2 && p.vz < -3) p.vz = -3;
+      p.z += p.vz * dt;
+      p.flip += p.spin * dt;
+      if (!gnd && p.z <= fl) {
+        const was = p.st;
+        p.z = fl;
+        p.vz = 0;
+        landed = true;
+        p.flip = 0;
+        p.spin = 0;
+        p.land = 0;
+        p.cut = 0;
+        if (was == 'dive') p.st = 'slide';
+        else {
+          p.st = 'ground';
+          if (was == 'slam') {
+            p.vx = p.vy = 0;
+            p.chain = 0
+          }
+        }
+      }
+    }
+    p.pitch = p.st == 'dive' || p.st == 'slide' ? 1.3 : p.flip;
+    p.zscale = gnd && cr && p.st == 'ground' ? .6 : 1;
+    return landed
+  }
+
+  /* A ground-pound shockwave: a trigger whose radius grows every frame. Each target
+     is hurt once, as the edge reaches it. */
+  class WaveScript extends ObjectReference {
+    constructor(self) {
+      super(self);
+      this.hit = new Set();
+      this.born = GSA.state().t;
+      this.r0 = self.radius;
+      this.RegisterForSingleUpdate(0);
+    }
+
+    OnUpdate() {
+      const w = this.self, s = GSA.state();
+      w.radius = this.r0 + w.base.sp * (s.t - this.born);
+      if (w.radius >= w.base.max) this.Delete();
+      else this.RegisterForSingleUpdate(0);
+    }
+
+    OnTouch(other) {
+      const w = this.self, b = w.base, s = GSA.state();
+      if (this.hit.has(other) || !GSA.ai.isTarget(other, s)) return;
+      this.hit.add(other);
+      T_Damage(other, w, w.owner, b.dmg);
+      if (other.dead) return;
+      if (b.kb) {
+        const d = dist([other.x, other.y], [w.x, w.y]) || 1;
+        GSA.physics.shove(s, other, (other.x - w.x) / d * b.kb, (other.y - w.y) / d * b.kb);
+      }
+      if (b.stun) other.slow = b.stun;
+    }
+  }
+
+  /* Ground pound landing: a growing ring that hurts, and for the Nord (bowser_slam)
+     knocks back and slows. */
+  function slamWave(s, p) {
+    const big = (s.race.flags || []).includes('bowser_slam');
+    spawn({
+      base: { type: 'wave', max: big ? 7.5 : 1.6, sp: big ? 14 : 8, dmg: big ? 2 : 1, kb: big ? 2.5 : 0, stun: big ? 2 : 0 },
+      x: p.x, y: p.y, radius: .3, owner: p, solid: 'SOLID_TRIGGER', script: WaveScript
+    });
+    if (big) s.shk = .3;
+    GSA.ai.emitSound(p.x, p.y, 16, 6);
+  }
+
+  /* The engine calls this every frame for the player. */
+  function PlayerPreThink(self, dt) {
+    const s = GSA.state(), inp = GSA.inputs;
+    if (self.st === undefined) Object.assign(self, { st: 'ground', tm: 0, chain: 0, land: 1, ctl: .6, cut: 0, spin: 0, flip: 0, dh: 0, pound: 0, stepT: 0 });
+    if (self.vehicle) {   /* the vehicle is moving us */
+      self.vx = self.vy = 0;
+      return;
+    }
+
+    /* WASD relative to the camera: forward is (sin yaw, cos yaw), right is (cos yaw, -sin yaw) */
+    const yaw = self.v_angle[1],
+      axis = (pos, neg) => (inp.pressed(pos) ? 1 : 0) - (inp.pressed(neg) ? 1 : 0),
+      ix = axis('move_right', 'move_left'), iy = axis('forward', 'backward'), il = Math.hypot(ix, iy),
+      mx = il ? (ix * Math.cos(yaw) + iy * Math.sin(yaw)) / il * s.race.speed : 0,
+      my = il ? (-ix * Math.sin(yaw) + iy * Math.cos(yaw)) / il * s.race.speed : 0,
+      crouch = inp.pressed('crouch');
+
+    const landed = kit(s, dt, {
+      mx, my, crouch,
+      jump: inp.tapped('jump'), jumpHeld: inp.pressed('jump'),
+      crouchTap: inp.tapped('crouch'), dive: inp.tapped('dive')
+    });
+
+    if (landed && self.pound) slamWave(s, self);
+    if (landed) self.pound = 0;
+
+    if ((self.st == 'dive' || self.st == 'slide') && !self.dh) {
+      const t = GSA.ai.combatTargets(s).find(m => dist([m.x, m.y], [self.x, self.y]) < 1);
+      if (t) {
+        T_Damage(t, self, self, 1);
+        self.dh = 1;
+      }
+    }
+
+    /* footsteps make noise; crouching is quieter */
+    if (self.st == 'ground' && Math.hypot(self.vx, self.vy) > .5 && (self.stepT -= dt) <= 0) {
+      self.stepT = crouch ? .6 : .35;
+      GSA.ai.emitSound(self.x, self.y, 4, 1);
+    }
+  }
+
+  window.PlayerPreThink = PlayerPreThink;
+})();
+</script></script>
+		<script>/* data/gtav.js — a drivable car, GTA style.
+
+   The car is an edict like any other (base.type 'vehicle'), placed when the game
+   starts. Its script, CarScript, has two states:
+     Parked  does nothing; OnActivate gets the player in
+     Driven  thinks every frame: reads the buttons, moves the car, splatters anything
+             hostile it hits, and carries the driver with it; OnActivate gets them out
+   The player edict is marked as riding it (player.vehicle), which tells
+   data/mario64.js to stand aside. Activating (the exit key) is the engine's generic
+   use action: it sends OnActivate to the vehicle you are in, or the nearest thing
+   that handles it.
+
+   The city may give the car's spot as `car: [x, y]`. The car is drawn from
+   base.build, the same way a race draws its avatar. Needs data/ loaded after
+   physics.js and scripting.js, before engine.js. */
+(() => {
+  const { RC, hit } = GSA.physics;
+
+  /* A red body with a dark cabin, front towards +z. */
+  const carModel = a => {
+    a(new THREE.BoxGeometry(1.3, .5, 2.4), '#d1495b', 0, .45, 0);
+    a(new THREE.BoxGeometry(1.1, .4, 1.2), '#2a2d34', 0, .9, -.15);
+  };
+
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+  class CarScript extends ObjectReference {
+    constructor(self) {
+      super(self);
+      self.speed = 0;
+      this.driver = null;
+      this.states = {
+        Parked: {
+          OnActivate: akActionRef => this.getIn(akActionRef)
+        },
+        Driven: {
+          OnBeginState: () => {
+            this.last = GSA.state().t;
+            this.RegisterForSingleUpdate(0);
+          },
+          OnEndState: () => this.UnregisterForUpdate(),
+          OnActivate: () => this.getOut(),
+          OnUpdate: () => {
+            this.drive();
+            this.RegisterForSingleUpdate(0);
+          }
+        }
+      };
+      this.GoToState('Parked');
+    }
+
+    getIn(driver) {
+      this.driver = driver;
+      driver.vehicle = this.self;
+      this.GoToState('Driven');
+    }
+
+    /* Step out on the right, else the left, else on the spot. */
+    getOut() {
+      const s = GSA.state(), c = this.self, d = this.driver,
+        o = [[Math.cos(c.heading) * 1.8, -Math.sin(c.heading) * 1.8], [-Math.cos(c.heading) * 1.8, Math.sin(c.heading) * 1.8], [0, 0]]
+          .find(([a, b]) => !hit(s, c.x + a, c.y + b, 0));
+      d.x = c.x + o[0];
+      d.y = c.y + o[1];
+      d.vehicle = null;
+      c.speed = 0;
+      this.driver = null;
+      this.GoToState('Parked');
+    }
+
+    drive() {
+      const s = GSA.state(), inp = GSA.inputs, c = this.self, d = this.driver,
+        dt = s.t - this.last,
+        up = inp.pressed('forward'), down = inp.pressed('backward'),
+        left = inp.pressed('move_left'), right = inp.pressed('move_right');
+      this.last = s.t;
+
+      c.speed += ((up ? 14 : 0) - (down ? 18 : 0)) * dt;
+      c.speed = clamp(c.speed, -6, 16) * (1 - (up || down ? 0 : 1.5 * dt));
+      /* heading is a compass bearing, so turning right adds to it */
+      c.heading += ((right ? 1 : 0) - (left ? 1 : 0)) * 2.2 * dt * clamp(c.speed / 4, -1, 1);
+
+      const nx = c.x + Math.sin(c.heading) * c.speed * dt,
+        ny = c.y + Math.cos(c.heading) * c.speed * dt;
+      if (nx < .9 || nx > s.size[0] - .9 || ny < .9 || ny > s.size[1] - .9 || RC(nx, ny, s.walls.concat(s.city.water || []), .9)) c.speed *= -.3;
+      else {
+        c.x = nx;
+        c.y = ny;
+      }
+
+      /* splatter: anything hostile in front of a fast car dies */
+      if (Math.abs(c.speed) > 5)
+        for (const m of GSA.ai.live(s))
+          if (dist([m.x, m.y], [c.x, c.y]) < 1.5 && GSA.ai.hostile(m, s)) T_Damage(m, c, d, Infinity);
+
+      d.x = c.x;
+      d.y = c.y;
+    }
+  }
+
+  GSA.bus.on('start', ({ S }) => {
+    const at = S.city.car || [24.5, 13];
+    spawn({ base: { type: 'vehicle', key: 'car', build: carModel }, x: at[0], y: at[1], heading: 0, radius: .9, sc: 'city', script: CarScript });
+  });
+})();
+</script></script>
