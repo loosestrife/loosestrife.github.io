@@ -102,16 +102,17 @@
 		<main>
 			<canvas id="c"></canvas>
 			<div id="hud"></div>
-			<div>City: <button onclick="GSA.start({city:'sample'})">Test Valley</button><button onclick="GSA.start({city:'river'})">River City</button></div>
+			<div>City: <button onclick="GSA.start({city:'sample'})">Test Valley</button><button onclick="GSA.start({city:'river'})">River City</button><button onclick="GSA.start({city:'medici'})">San Medici di Skyrim</button></div>
 			<div>Race: <button onclick="GSA.start({race:'nord'})">Nord</button><button onclick="GSA.start({race:'elf'})">Elf</button><button onclick="GSA.start({race:'martian'})">Martian</button></div>
 			<div>Interior: <button onclick="GSA.start({interior:'stock'})">Stock data center</button><button onclick="GSA.start({interior:'zombie'})">Zombie data center</button></div>
 			<pre id="log"></pre>
-			<p style="font-size:13px;opacity:.7">Click the game to capture the mouse (Esc releases; dragging also turns the camera). The mouse turns the camera and WASD moves relative to it. Space jumps, and Space again while airborne against a wall wall-jumps. Nord: jump, then C or Shift to ground pound. Elf: hold click or F for the frost beam. Martian: click or F fires plasma. Press E next to the red car to drive (W/S throttle, A/D steer, E exits); you can run cops over, and only the embassy door works from the car. Test Valley also has a gather-and-craft loop: pick up the luna moth wing (southeast) and ice wraith teeth (northwest), press E at the Alchemy Station (southeast) to brew, then Q to drink: cops and zombies lose you for 25 seconds. Press E next to the Starfighter (north of the start) to fly a sortie: mouse or A/D steer, Space and Shift climb and dive, W boosts, S brakes, click or F fires lasers, R fires a homing missile, E twice leaves. Drink the invisibility potion (Q) and the Dreadnought at the end of the canyon can no longer see you: it only shoots at the last place it saw you shoot from, marked in red. Plug in content from the console, for example <code>GSA.packs.races.mine = {...}</code> then <code>GSA.start({race:'mine'})</code>. Engine events such as <code>in:front</code>, <code>out:back</code>, <code>deliver</code> and <code>alarm_raised</code> go through a global bus, so hook them from the console with <code>GSA.bus.on('alarm_raised', (ctx) => ...)</code> (the callback receives the live state plus <code>ctx.heat(d)</code>).</p>
+			<p style="font-size:13px;opacity:.7">Click the game to capture the mouse (Esc releases; dragging also turns the camera). The mouse turns the camera and WASD moves relative to it. Space jumps, and Space again while airborne against a wall wall-jumps. Nord: jump, then C or Shift to ground pound. Elf: hold click or F for the frost beam. Martian: click or F fires plasma. Press E next to the red car to drive (W/S throttle, A/D steer, E exits); you can run cops over, and only the embassy door works from the car. Test Valley also has a gather-and-craft loop: pick up the luna moth wing (southeast) and ice wraith teeth (northwest), press E at the Alchemy Station (southeast) to brew, then Q to drink: cops and zombies lose you for 25 seconds. Press E next to the Starfighter (north of the start) to fly a sortie: mouse or A/D steer, Space and Shift climb and dive, W boosts, S brakes, click or F fires lasers, R fires a homing missile, E twice leaves. Drink the invisibility potion (Q) and the Dreadnought at the end of the canyon can no longer see you: it only shoots at the last place it saw you shoot from, marked in red. San Medici di Skyrim is an island generated from a seed: one big mountain, a stream that starts high up and feeds a lake, then a river into a bay on the south coast. Ground steeper than about 50 degrees acts as a wall (you can wall-jump off it), you can wade streams but not rivers, the lake or the sea, and bolts stop at the ground. Plug in content from the console, for example <code>GSA.packs.races.mine = {...}</code> then <code>GSA.start({race:'mine'})</code>. Engine events such as <code>in:front</code>, <code>out:back</code>, <code>deliver</code> and <code>alarm_raised</code> go through a global bus, so hook them from the console with <code>GSA.bus.on('alarm_raised', (ctx) => ...)</code> (the callback receives the live state plus <code>ctx.heat(d)</code>).</p>
 		</main>
 		<!-- Libraries -->
 		<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
-		<script>/* Event bus: the only place engine events are published.
+		<script pathHint="engine/bus.js">// /engine/bus.js
+/* Event bus: the only place engine events are published.
    Content packs and console scripts subscribe here instead of reading engine state.
 
    GSA.bus.on(name, fn)       subscribe
@@ -139,7 +140,8 @@ const bus = {
 };
 
 (window.GSA = window.GSA || {}).bus = bus;</script></script>
-		<script>/* inputs.js — key and mouse bindings, using Quake key names.
+		<script pathHint="engine/inputs.js">// /engine/inputs.js
+/* key and mouse bindings, using Quake key names.
 
      bind('w', '+forward')   a held button:  pressed('forward'), tapped('forward')
      bind('e', 'exit')       a one-shot command: GSA.inputs.handlers.exit = () => ...
@@ -191,7 +193,8 @@ addEventListener('blur', () => { for (const b in buttons) buttons[b] = 0; });
 
 (window.GSA = window.GSA || {}).inputs = { bind, pressed, tapped, endFrame, handlers };
 </script></script>
-		<script>bind('w', '+forward');
+		<script pathHint="data/conf.js">// /data/conf.js
+bind('w', '+forward');
 bind('s', '+backward');
 bind('a', '+move_left');
 bind('d', '+move_right');
@@ -203,9 +206,11 @@ bind('v', 'item_next');
 bind('mwheelup', 'weapon_prev');
 bind('mwheeldown', 'weapon_next');
 bind('mouse1', '+attack');
+bind('r', '+missile');
 bind('e', 'exit');
 bind('x', '+dive');</script></script>
-		<script>/* Name a snake_case key as title case ("ice_wraith_teeth" -> "Ice wraith teeth"). */
+		<script pathHint="data/packs.js">// /data/packs.js
+/* Name a snake_case key as title case ("ice_wraith_teeth" -> "Ice wraith teeth"). */
 const niceName = k => k.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase());
 
 /* Site interfaces: what a site type is defined by. */
@@ -389,6 +394,8 @@ const packs = {
 		sample: {
 			name: 'Sample City',
 			size: [44, 26],
+			curbs: true,
+			mountains: { seed: 7, peak: 60 },
 			ship: [18, 21],
 			/* A spawner keeps one mob alive at its spot and brings a new one `delay`
 			   seconds after it dies. The mob's dropTable gives the player its wing / teeth. */
@@ -428,6 +435,40 @@ const packs = {
 				nation: 'france',
 				name: 'French Embassy',
 				r: [4, 4, 6, 5]
+			}]
+		},
+		/* An island made from a seed (see generateIsland in engine/physics.js): one big mountain, a stream
+		   that starts near its top, feeds a lake and becomes a river, and a bay on the south coast. The
+		   ocean all round is the edge of the map. Sites sit on flat pads the generator cuts for them. */
+		medici: {
+			name: 'San Medici di Skyrim',
+			size: [200, 160],
+			island: { seed: 1521, streamFlow: 1500 },
+			spawn: [150, 56.5],
+			car: [153, 56.5],
+			ship: [146, 56.5],
+			sites: [{
+				id: 'dc_east',
+				type: 'data_center',
+				name: 'Cantina Data Center',
+				r: [146, 62, 8, 5]
+			}, {
+				id: 'emb_cn',
+				type: 'embassy',
+				nation: 'china',
+				name: 'Chinese Embassy',
+				r: [137, 52, 6, 5]
+			}, {
+				id: 'dc_west',
+				type: 'data_center',
+				name: 'Skyrim Server Hall',
+				r: [52, 52, 8, 5]
+			}, {
+				id: 'emb_fr',
+				type: 'embassy',
+				nation: 'france',
+				name: 'French Embassy',
+				r: [56, 67, 6, 5]
 			}]
 		}
 	},
@@ -580,7 +621,8 @@ const mission = {
 };
 
 const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);</script></script>
-    <script>/* Site layout: portal geometry and mission binding. Pure functions over packs. */
+    <script pathHint="engine/site.js">// /engine/site.js
+/* Site layout: portal geometry and mission binding. Pure functions over packs. */
 /* Where the rings of a site are. x runs east and y north, so the front door
    (and the embassy door) faces south and the back door faces north. */
 const portalsOf = s => {
@@ -629,7 +671,8 @@ function portalList(s, scene = s.scene) {
 	const a = portalsOf(s.B.source), d = portalsOf(s.B.dest);
 	return [{ k: 'front', at: a.front }, { k: 'back', at: a.back }, { k: 'door', at: d.door }];
 }</script></script>
-		<script>/* physics.js — the engine's collision and movement builtins, like QuakeC's
+		<script pathHint="engine/physics.js">// /engine/physics.js
+/* the engine's collision and movement builtins, like QuakeC's
    walkmove and traceline. Content (data/*.js) calls these; nothing here knows
    about Mario, cars or meshes.
 
@@ -645,23 +688,62 @@ const WH = s => s.scene == 'int' ? 2.2 : 5;
 
 /* Is a body at height z blocked at (x, y)? Walls block anything below their top;
    city water blocks anything walking (below 0.3). */
-const hit = (s, x, y, z) => z < WH(s) - .2 && RC(x, y, s.walls) || z < .3 && s.scene == 'city' && RC(x, y, s.city.water || []);
+const hit = (s, x, y, z) => z < WH(s) - .2 && RC(x, y, s.walls) || z < .3 && s.scene == 'city' && RC(x, y, s.city.water || []) || wet(s, x, y, z);
+
+/* Deep water on a heightmap (city.island): the heightmap has a water level per cell, and you can
+   wade where it is under 0.7 deep. A thing is blocked where it is deeper and its feet are below
+   the surface plus 0.3, so you can still jump across a river. */
+function wet(s, x, y, z) {
+  if (s.scene != 'city') return false;
+  const hm = terrain(s.city);
+  if (!hm || !hm.level) return false;
+  const i = Math.min(hm.cols - 1, Math.max(0, Math.round(x / hm.res))), j = Math.min(hm.rows - 1, Math.max(0, Math.round(y / hm.res))),
+    L = hm.level[j * hm.cols + i];
+  return L > -1e8 && L - heightAt(hm, x, y) > .7 && z < L + .3;
+}
+
+/* Steep ground. Moving from (x0, y0) to (x1, y1) with feet at z: a step up of more than STEP is a
+   cliff, and uphill ground steeper than MAXSLOPE is too steep to walk. Either returns the
+   downhill unit normal (so a steep face works as a wall for wall jumps), else null. Kerbs are far
+   under both limits. */
+const STEP = .45, MAXSLOPE = 1.3;
+function climb(hm, x0, y0, x1, y1, z) {
+  const g1 = heightAt(hm, x1, y1);
+  if (g1 <= z + .02) return null;
+  const gx = heightAt(hm, x1 + .25, y1) - heightAt(hm, x1 - .25, y1), gy = heightAt(hm, x1, y1 + .25) - heightAt(hm, x1, y1 - .25),
+    n = Math.hypot(gx, gy) || 1;
+  if (g1 - z <= STEP && !(g1 > heightAt(hm, x0, y0) + 1e-4 && n / .5 > MAXSLOPE)) return null;
+  return [-gx / n, -gy / n];
+}
+const steep = (s, x0, y0, x1, y1, z) => {
+  const hm = s.scene == 'city' ? terrain(s.city) : null;
+  return hm ? climb(hm, x0, y0, x1, y1, z) : null;
+};
+/* Is a point (a bolt, say) inside the ground? Only on a generated island: elsewhere z is not a height. */
+const inTerrain = (s, x, y, z) => {
+  const hm = s.scene == 'city' ? terrain(s.city) : null;
+  return !!(hm && hm.island && z < heightAt(hm, x, y) - .05);
+};
 
 /* Move e by (dx, dy), each axis separately so it slides along walls. Returns the
    normal of the last wall it ran into, or null. */
 const mv = (s, e, dx, dy) => {
-  const z = e.z || 0;
+  const hm = s.scene == 'city' ? terrain(s.city) : null;
+  /* everything but the player rides the ground; the player's z belongs to the movement kit */
+  const z = hm && e !== s.p ? (e.z = heightAt(hm, e.x, e.y)) : e.z || 0;
   let wall = null;
   const x = e.x + dx;
   if (x > .35 && x < s.size[0] - .35) {
-    if (!hit(s, x, e.y, z)) e.x = x;
-    else if (dx) wall = [-Math.sign(dx), 0];
-  }
+    const up = hm && climb(hm, e.x, e.y, x, e.y, z);
+    if (!hit(s, x, e.y, z) && !up) e.x = x;
+    else if (dx) wall = up || [-Math.sign(dx), 0];
+  } else if (dx && z < valleyWall(s, x, e.y) - .2) wall = [x <= .35 ? 1 : -1, 0];   /* the valley wall, which you can kick off */
   const y = e.y + dy;
   if (y > .35 && y < s.size[1] - .35) {
-    if (!hit(s, e.x, y, z)) e.y = y;
-    else if (dy) wall = [0, -Math.sign(dy)];
-  }
+    const up = hm && climb(hm, e.x, e.y, e.x, y, z);
+    if (!hit(s, e.x, y, z) && !up) e.y = y;
+    else if (dy) wall = up || [0, -Math.sign(dy)];
+  } else if (dy && z < valleyWall(s, e.x, y) - .2) wall = [0, y <= .35 ? 1 : -1];
   return wall;
 };
 
@@ -680,8 +762,387 @@ const shove = (s, e, dx, dy) => {
   for (let i = 0; i < 6; i++) mv(s, e, dx / 6, dy / 6);
 };
 
-(window.GSA = window.GSA || {}).physics = { RC, WH, hit, mv, steerTowards, shove };</script></script>
-		<script>/* ai.js — what a mob knows and what happens to it: factions, senses, spawning,
+/* ---------- Terrain: the heightmap ----------
+   A city's ground is a grid of heights (x east, y north, z up), one sample every HM_RES
+   tiles, read with bilinear interpolation. Everything that rides on the ground (the player,
+   the car, the renderer) asks groundZ(s, x, y), so a feature added to the grid shows up in
+   all of them at once. Interiors and the sky scene are flat (0).
+   A city feeds the grid from:
+     curbs: true | { height, width }   a raised sidewalk around every site
+     terrain: { height: (x, y) => z,   a base surface (hills, valleys; the overworld goes here)
+                rects: [[x, y, w, d, z]] }   plateaus: the ground is at least z inside each rect
+     mountains: { seed, peak, ramp, reach, summit: [x, y] }   procedural mountains outside the map
+                (see mountainHeight); the valley floor stays at 0 and the wall rises from its edge
+   The grid is built once per city; GSA.physics.terrain(city, true) rebuilds it. */
+const HM_RES = .1, CURB_H = .15, CURB_W = .6;
+
+function buildHeightmap(city) {
+  if (city.island) return generateIsland(city);
+  const cb = city.curbs && (city.curbs === true ? {} : city.curbs), tr = city.terrain;
+  if (!cb && !tr) return null;
+  const [W, D] = city.size, cols = Math.ceil(W / HM_RES) + 1, rows = Math.ceil(D / HM_RES) + 1,
+    z = new Float32Array(cols * rows), E = 1e-6;
+  if (tr && tr.height)
+    for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) z[j * cols + i] = tr.height(i * HM_RES, j * HM_RES);
+  const raise = ([x, y, w, d], h) => {
+    const i0 = Math.max(0, Math.ceil(x / HM_RES - E)), i1 = Math.min(cols - 1, Math.floor((x + w) / HM_RES + E)),
+      j0 = Math.max(0, Math.ceil(y / HM_RES - E)), j1 = Math.min(rows - 1, Math.floor((y + d) / HM_RES + E));
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) z[j * cols + i] = Math.max(z[j * cols + i], h);
+  };
+  if (cb) {
+    const m = cb.width ?? CURB_W, h = cb.height ?? CURB_H;
+    for (const { r: [x, y, w, d] } of city.sites) raise([x - m, y - m, w + 2 * m, d + 2 * m], h);
+  }
+  for (const [x, y, w, d, h] of (tr && tr.rects) || []) raise([x, y, w, d], h);
+  let max = 0;
+  for (let i = 0; i < z.length; i++) if (z[i] > max) max = z[i];
+  return { cols, rows, res: HM_RES, z, max };
+}
+
+/* ---------- Procedural mountains ----------
+   Seeded value noise: hash the lattice corners, blend with a smoothstep. fbm sums octaves;
+   ridged folds it so the crests are sharp lines instead of round hills. Pure functions of
+   (seed, x, y), so any chunk of the overworld can be generated on demand. */
+const hash2 = (i, j, seed) => {
+  let h = (Math.imul(i, 374761393) + Math.imul(j, 668265263) + Math.imul(seed | 0, 1442695041)) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+};
+const vnoise = (x, y, seed) => {
+  const i = Math.floor(x), j = Math.floor(y), u = x - i, v = y - j,
+    a = u * u * (3 - 2 * u), b = v * v * (3 - 2 * v),
+    n = (di, dj) => hash2(i + di, j + dj, seed);
+  return (n(0, 0) * (1 - a) + n(1, 0) * a) * (1 - b) + (n(0, 1) * (1 - a) + n(1, 1) * a) * b;
+};
+const fbm = (x, y, seed, oct = 5) => {
+  let s = 0, amp = .5, f = 1, norm = 0;
+  for (let o = 0; o < oct; o++, amp /= 2, f *= 2) {
+    s += amp * vnoise(x * f, y * f, seed + o * 101);
+    norm += amp;
+  }
+  return s / norm;
+};
+const ridged = (x, y, seed, oct = 5) => {
+  let s = 0, amp = .5, f = 1, norm = 0;
+  for (let o = 0; o < oct; o++, amp /= 2, f *= 2) {
+    s += amp * (1 - Math.abs(2 * vnoise(x * f, y * f, seed + o * 101) - 1));
+    norm += amp;
+  }
+  return s / norm;
+};
+const smooth = t => (t = Math.min(Math.max(t, 0), 1)) * t * (3 - 2 * t);
+
+/* The valley wall: a vertical face at the map edge, like the walls round Peach's castle, whose crest height varies along the edge
+   (noise sampled at the nearest edge point, from 40% to 100% of `wall`, default 14 tiles), so
+   the wall is a ragged procedural cliff line rather than a uniform fence. You can walk right up to it. mv() lets you
+   wall-jump off it up to this height; the mountains stand on top of it. */
+const wallCrest = (city, x, y) => {
+  const m = city.mountains, cx = Math.min(Math.max(x, 0), city.size[0]), cy = Math.min(Math.max(y, 0), city.size[1]);
+  return (m.wall ?? 14) * (.4 + .6 * smooth((ridged(cx * .07, cy * .07, (m.seed ?? 1) + 3) - .6) / .3));   /* ridged noise sits in ~.6-.9: stretch it */
+};
+const valleyWall = (s, x, y) => s.scene == 'city' && s.city.mountains ? wallCrest(s.city, x, y) : 0;
+
+/* Height of the mountains at (x, y): 0 on the valley floor (and anywhere without
+   city.mountains), a steep wall rising from the map edge, a ridge line hugging the valley
+   that fades into plains `reach` tiles out, and one big summit (default: past the north edge). */
+const mountainHeight = (city, x, y) => {
+  const m = city.mountains;
+  if (!m) return 0;
+  const [W, D] = city.size, d = Math.hypot(Math.max(-x, 0, x - W), Math.max(-y, 0, y - D));
+  if (d === 0) return 0;
+  const peak = m.peak ?? 60, ramp = m.ramp ?? 14, reach = m.reach ?? 90, seed = m.seed ?? 1,
+    [sx, sy] = m.summit || [W * .6, D + reach * .55],
+    edge = smooth(d / ramp),
+    range = edge * (1 - smooth((d - reach * .6) / (reach * .4))),
+    bump = Math.exp(-((x - sx) ** 2 + (y - sy) ** 2) / (2 * (reach * .28) ** 2)),
+    r = ridged(x * .035, y * .035, seed);
+  /* the wall is the vertical step from the floor (0) up to the crest at the edge; the mountains
+     start at crest height and rise from there */
+  return wallCrest(city, x, y) + peak * (.28 * range * (.4 + .6 * r) + .72 * edge * bump * (.5 + .5 * r)) + edge * 1.2 * fbm(x * .15, y * .15, seed + 7);
+};
+
+/* ---------- Island generator: terrain, water table, streams, lakes, bay ----------
+   city.island = { seed, peak, res, ... } makes a whole island from a seed. Pure and
+   deterministic; the result is the same heightmap object terrain() hands out, plus
+   a water level per cell and a colour per cell:
+     1. terrain   an elliptical island of rolling plains round one big ridged mountain,
+                  a bay cut into the south coast, a lake basin and a river valley
+                  (a meandering polyline) carved from the mountain to the bay
+     2. water     priority-flood fills every depression to its spill height (lakes are the
+        table     deep, wide ones) and routes rain downhill: D8 flow directions, then flow
+                  accumulation. The water table is the terrain's damped copy (a blur of it,
+                  relaxed, capped at the surface); where it reaches the surface the ground
+                  seeps and adds base flow, so streams start where the table meets the slope
+     3. rivers    cells whose accumulated flow passes a threshold get a channel carved,
+                  widening and deepening with the flow: stream, then river, then the bay
+     4. pads      each site gets a flat pad blended into the slope
+   Sea level is 0. Units are tiles. */
+function generateIsland(city) {
+  const o = city.island, [W, D] = city.size, res = o.res ?? .5, seed = o.seed ?? 1, SEA = 0,
+    cols = Math.ceil(W / res) + 1, rows = Math.ceil(D / res) + 1, N = cols * rows,
+    [cx, cy] = o.center ?? [W * .5, D * .52], peak = o.peak ?? 44, Rm = o.mountainRadius ?? 46,
+    [sx, sy] = o.summit ?? [cx, cy + 6],
+    bay = o.bay ?? [cx + 4, cy - 52, 11, 14, 10],            /* x, y, sigma x, sigma y, depth */
+    lake = o.lake ?? [cx - 3, cy - 20, 7, 5],                /* x, y, radius, depth: a tarn held by a raised rim */
+    ctl = o.river ?? [[cx - 4, cy - 2], [cx - 9, cy - 11], [cx - 2, cy - 21], [cx - 6, cy - 29], [cx + 3, cy - 36], [cx + 4, cy - 40]],
+    T = new Float32Array(N), V = new Float32Array(N), ix = (i, j) => j * cols + i, rnd = (a, b) => hash2(a, b, seed + 77) - .5;
+
+  /* the river valley as a jittered polyline, with fraction-downstream t along it */
+  const pts = [];
+  for (let k = 0; k < ctl.length - 1; k++)
+    for (let s = 0; s < 6; s++) {
+      const u = s / 6, j = (k * 6 + s) / ((ctl.length - 1) * 6);
+      pts.push([ctl[k][0] + (ctl[k + 1][0] - ctl[k][0]) * u + rnd(k, s) * 5 * j, ctl[k][1] + (ctl[k + 1][1] - ctl[k][1]) * u + rnd(s, k) * 5 * j]);
+    }
+  pts.push(ctl[ctl.length - 1]);
+  const valley = (x, y) => {
+    let best = 1e9, bt = 0;
+    for (let k = 0; k < pts.length - 1; k++) {
+      const [ax, ay] = pts[k], [bx, by] = pts[k + 1], vx = bx - ax, vy = by - ay,
+        u = Math.min(1, Math.max(0, ((x - ax) * vx + (y - ay) * vy) / (vx * vx + vy * vy))),
+        d = Math.hypot(x - ax - vx * u, y - ay - vy * u);
+      if (d < best) { best = d; bt = (k + u) / (pts.length - 1); }
+    }
+    return (2 + 5 * bt) * Math.exp(-best * best / (2 * (2.2 + 4.3 * bt) ** 2));
+  };
+
+  /* 1. terrain */
+  const hgt = (x, y) => {   /* island + mountain + roughness, before anything is carved */
+    const dx = x - cx, dy = y - cy, r = Math.hypot(dx, dy / .82) + 18 * (fbm(x * .025, y * .025, seed + 1) - .5),
+      base = 11 * (1 - smooth((r - 58) / 22)) - 7, m = Math.max(0, 1 - Math.hypot(x - sx, y - sy) / Rm);
+    return base + peak * (.55 * m * m * (3 - 2 * m) + .45 * m ** 1.6) * (.55 + .45 * ridged(x * .045, y * .045, seed + 2)) +   /* smooth foot, steeper middle */
+      3.5 * (fbm(x * .09, y * .09, seed + 3) - .5) * 2 * Math.sqrt(m) + 1 * (fbm(x * .2, y * .2, seed + 4) - .5) * smooth((base + 2) / 4);
+  };
+  /* the tarn: its level sits a little under the ground at its centre; inside the radius the ground is
+     replaced by a bowl, just outside it the ground is raised into a rim that fades back over 5 tiles */
+  const lakeL = hgt(lake[0], lake[1]) - .8;
+  for (let j = 0; j < rows; j++)
+    for (let i = 0; i < cols; i++) {
+      const x = i * res, y = j * res;
+      let h = hgt(x, y);
+      const dl = Math.hypot(x - lake[0], y - lake[1]) + 3 * (fbm(x * .18, y * .18, seed + 9) - .5) * 2;   /* ragged shore */
+      if (dl < lake[2]) h = lakeL - lake[3] * (1 - (dl / lake[2]) ** 2);
+      else if (dl < lake[2] + 5) h = Math.max(h, lakeL + 1 - smooth((dl - lake[2]) / 5));
+      if (h > SEA - 1) h -= V[ix(i, j)] = valley(x, y);
+      h -= bay[4] * Math.exp(-((x - bay[0]) ** 2 / (2 * bay[2] ** 2) + (y - bay[1]) ** 2 / (2 * bay[3] ** 2)));
+      T[ix(i, j)] = h;
+    }
+  const T0 = Float32Array.from(T), nb = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
+
+  /* 2a. priority-flood: F is the surface water would settle to (depressions filled to their spill) */
+  const F = new Float32Array(N).fill(Infinity), seen = new Uint8Array(N), heap = new Int32Array(N + 2), EPS = 2e-4;
+  let hs = 0;
+  const push = c => {
+    heap[++hs] = c;
+    for (let k = hs; k > 1 && F[heap[k]] < F[heap[k >> 1]]; k >>= 1) { const a = heap[k]; heap[k] = heap[k >> 1]; heap[k >> 1] = a; }
+  }, pop = () => {
+    const top = heap[1];
+    heap[1] = heap[hs--];
+    for (let k = 1; ;) {
+      const l = k * 2, r = l + 1;
+      let m = k;
+      if (l <= hs && F[heap[l]] < F[heap[m]]) m = l;
+      if (r <= hs && F[heap[r]] < F[heap[m]]) m = r;
+      if (m === k) break;
+      const a = heap[k]; heap[k] = heap[m]; heap[m] = a;
+      k = m;
+    }
+    return top;
+  };
+  for (let j = 0; j < rows; j++)
+    for (let i = 0; i < cols; i++) {
+      const c = ix(i, j);
+      if (i == 0 || j == 0 || i == cols - 1 || j == rows - 1 || T[c] <= SEA) { F[c] = T[c]; seen[c] = 1; push(c); }
+    }
+  while (hs) {
+    const c = pop(), ci = c % cols, cj = (c / cols) | 0;
+    for (const [a, b] of nb) {
+      const i = ci + a, j = cj + b;
+      if (i < 0 || j < 0 || i >= cols || j >= rows) continue;
+      const n = ix(i, j);
+      if (seen[n]) continue;
+      seen[n] = 1;
+      F[n] = Math.max(T[n], F[c] + EPS);
+      push(n);
+    }
+  }
+
+  /* 2b. the water table: a damped copy of the terrain (blur of land-or-sea-level, capped at the
+     surface), relaxed with the sea as its fixed boundary. Where it meets the surface the ground seeps. */
+  const box = (src, r) => {   /* separable box blur, radius r cells */
+    const tmp = new Float32Array(N), out = new Float32Array(N);
+    for (let j = 0; j < rows; j++) {
+      let acc = 0, n = 0;
+      for (let i = -r; i < cols + r; i++) {
+        const a = i + r, b = i - r - 1;
+        if (a < cols) { acc += src[ix(a, j)]; n++; }
+        if (b >= 0) { acc -= src[ix(b, j)]; n--; }
+        if (i >= 0 && i < cols) tmp[ix(i, j)] = acc / n;
+      }
+    }
+    for (let i = 0; i < cols; i++) {
+      let acc = 0, n = 0;
+      for (let j = -r; j < rows + r; j++) {
+        const a = j + r, b = j - r - 1;
+        if (a < rows) { acc += tmp[ix(i, a)]; n++; }
+        if (b >= 0) { acc -= tmp[ix(i, b)]; n--; }
+        if (j >= 0 && j < rows) out[ix(i, j)] = acc / n;
+      }
+    }
+    return out;
+  };
+  const above = Float32Array.from(T0, v => Math.max(v, SEA)), wt = box(box(above, 10), 10), land = c => T0[c] > SEA;
+  for (let c = 0; c < N; c++) wt[c] = land(c) ? Math.min(T0[c], wt[c]) : SEA;
+  for (let it = 0; it < 24; it++)
+    for (let j = 1; j < rows - 1; j++)
+      for (let i = 1; i < cols - 1; i++) {
+        const c = ix(i, j);
+        if (land(c)) wt[c] = Math.min(T0[c], (wt[c - 1] + wt[c + 1] + wt[c - cols] + wt[c + cols]) / 4);
+      }
+  const seep = new Uint8Array(N);
+  for (let c = 0; c < N; c++) if (land(c) && T0[c] > SEA + .4 && T0[c] - wt[c] < .05) seep[c] = 1;
+
+  /* 2c. rain, base flow, flow directions, accumulation */
+  const down = new Int32Array(N).fill(-1);
+  for (let j = 0; j < rows; j++)
+    for (let i = 0; i < cols; i++) {
+      const c = ix(i, j);
+      if (!land(c)) continue;
+      let best = 0;
+      for (const [a, b] of nb) {
+        const ni = i + a, nj = j + b;
+        if (ni < 0 || nj < 0 || ni >= cols || nj >= rows) continue;
+        const n = ix(ni, nj), s = (F[c] - F[n]) / (a && b ? 1.4142 : 1);
+        if (s > best) { best = s; down[c] = n; }
+      }
+    }
+  const acc = new Float32Array(N), order = new Uint32Array(N);
+  for (let c = 0; c < N; c++) { order[c] = c; acc[c] = land(c) ? .5 + 1.2 * smooth(T0[c] / (peak * .6)) + (seep[c] ? 4 : 0) + V[c] * 1.5 : 0; }   /* the valley gathers extra: it is the island's main drainage */
+  order.sort((a, b) => F[b] - F[a]);
+  for (let k = 0; k < N; k++) { const c = order[k]; if (down[c] >= 0) acc[down[c]] += acc[c]; }
+
+  /* lakes: connected runs of filled depression, kept only if wide and deep enough to matter */
+  const level = new Float32Array(N).fill(-1e9), lab = new Int32Array(N);
+  for (let c = 0; c < N; c++) {
+    if (lab[c] || !(F[c] - T0[c] > .12 && land(c) && F[c] > SEA + .2)) continue;
+    const stack = [c], cells = [];
+    let deep = 0;
+    lab[c] = 1;
+    while (stack.length) {
+      const q = stack.pop();
+      cells.push(q);
+      deep = Math.max(deep, F[q] - T0[q]);
+      const qi = q % cols, qj = (q / cols) | 0;
+      for (const [a, b] of nb) {
+        const i = qi + a, j = qj + b;
+        if (i < 0 || j < 0 || i >= cols || j >= rows) continue;
+        const n = ix(i, j);
+        if (!lab[n] && F[n] - T0[n] > .12 && land(n) && F[n] > SEA + .2) { lab[n] = 1; stack.push(n); }
+      }
+    }
+    if (deep > .8 && cells.length > 30) for (const q of cells) level[q] = F[q];
+  }
+
+  /* 3. rivers: carve a channel along every cell with enough flow, widening downstream */
+  const thr = o.streamFlow ?? 400;
+  for (let c = 0; c < N; c++) {
+    /* up the mountain a smaller flow already makes a stream: the threshold falls from thr at the shore to 45% of it above 24 tiles */
+    /* ...and the river valley always carries its stream from a spring near the top (any flow at all in its bed) */
+    if (!land(c) || acc[c] < (V[c] > 1.2 ? 20 : thr * (.45 + .55 * smooth((24 - T0[c]) / 24))) || level[c] > -1e8 || F[c] < SEA + .05) continue;
+    const i = c % cols, j = (c / cols) | 0, ratio = Math.max(1, acc[c] / thr),
+      w = .4 + .55 * Math.sqrt(ratio), wd = .3 * ratio ** .6, rad = Math.ceil(w * 1.8 / res);
+    for (let b = -rad; b <= rad; b++)
+      for (let a = -rad; a <= rad; a++) {
+        const ni = i + a, nj = j + b;
+        if (ni < 0 || nj < 0 || ni >= cols || nj >= rows) continue;
+        const n = ix(ni, nj), u = Math.hypot(a, b) * res / (w * 1.8);
+        if (u >= 1 || level[n] > -1e8 && lab[n]) continue;
+        /* the bed is a bowl cut into the local ground and the water sits in it, a third of its depth under the
+           old surface, so on a steep slope the stream follows the ground down instead of stepping */
+        const k = 1 - u * u, bed = T0[n] - 1.33 * wd * k;
+        if (bed < T[n]) {
+          T[n] = bed;
+          level[n] = bed + wd * k;
+        }
+      }
+  }
+  for (let c = 0; c < N; c++) {
+    if (T[c] < SEA) level[c] = Math.max(level[c], SEA);
+    else if (level[c] > -1e8 && level[c] - T[c] < .03) level[c] = -1e9;   /* a dry bank the stamp only grazed */
+  }
+
+  /* 4. flat pads for the sites, blended into the slope */
+  for (const { r: [x, y, w, d] } of city.sites) {
+    const pad = Math.max(SEA + 1.2, T[ix(Math.round((x + w / 2) / res), Math.round((y + d / 2) / res))]), m = 2, blend = 5;
+    for (let j = 0; j < rows; j++)
+      for (let i = 0; i < cols; i++) {
+        const px = i * res, py = j * res, e = Math.hypot(Math.max(x - m - px, 0, px - (x + w + m)), Math.max(y - m - py, 0, py - (y + d + m)));
+        if (e >= blend) continue;
+        const k = smooth(1 - e / blend), c = ix(i, j);
+        T[c] = T[c] + (pad - T[c]) * k;
+        if (k > .3) level[c] = -1e9;
+      }
+  }
+
+  /* colours: sea floor, sand, grass, forest, marsh, bare rock, snow */
+  const hex = s => [1, 3, 5].map(a => parseInt(s.slice(a, a + 2), 16) / 255),
+    P = { deep: hex('#2e5f80'), sand: hex('#d9c99a'), grass: hex('#78a35c'), forest: hex('#4b7a46'), marsh: hex('#5f8a5a'), alpine: hex('#9aa070'), rock: hex('#8d8c86'), snow: hex('#f3f7fa'), bed: hex('#7d8a74') },
+    color = new Float32Array(N * 3), mix = (a, b, k) => a.map((v, n) => v + (b[n] - v) * k), sm = (a, b, v) => smooth((v - a) / (b - a));
+  for (let j = 0; j < rows; j++)
+    for (let i = 0; i < cols; i++) {
+      const c = ix(i, j), h = T[c], x = i * res, y = j * res,
+        gx = (T[ix(Math.min(i + 1, cols - 1), j)] - T[ix(Math.max(i - 1, 0), j)]) / (2 * res),
+        gy = (T[ix(i, Math.min(j + 1, rows - 1))] - T[ix(i, Math.max(j - 1, 0))]) / (2 * res), sl = Math.hypot(gx, gy),
+        g = fbm(x * .15, y * .15, seed + 5), snowline = peak * .72;
+      let col;
+      if (h < SEA) col = mix(P.sand, P.deep, sm(0, 7, SEA - h));
+      else {
+        col = mix(P.grass, P.forest, sm(.35, .65, g) * sm(3, 9, h));
+        col = mix(col, P.alpine, sm(22, 32, h + 3 * (g - .5)));
+        if (seep[c] && h < 10 && sl < .45) col = mix(col, P.marsh, .7);
+        col = mix(col, P.rock, Math.max(sm(.7, 1.05, sl), sm(34, 44, h)));
+        col = mix(col, P.snow, sm(snowline - 3, snowline + 3, h + 4 * (g - .5)) * (1 - sm(1.1, 1.6, sl)));
+        col = mix(col, P.sand, sm(1.7, .6, h) * (1 - sm(.4, .9, sl)));
+        if (level[c] > -1e8) col = mix(col, P.bed, .8);
+      }
+      color.set(col, c * 3);
+    }
+  let max = 0;
+  for (let c = 0; c < N; c++) if (T[c] > max) max = T[c];
+  return { cols, rows, res, z: T, max, level, color, island: true, sea: SEA, stats: { acc, seep, F, T0, wt } };
+}
+
+/* The city's grid, or null if its ground is flat. */
+const terrain = (city, rebuild) => {
+  if (rebuild || city._hm === undefined) {
+    /* an island takes ~0.5 s to generate, so a restart reuses it while its config and sites are unchanged */
+    const key = city.island ? JSON.stringify([city.island, city.size, city.sites.map(q => q.r)]) : null;
+    if (!(key && city._hm && city._hmKey === key)) {
+      city._hm = buildHeightmap(city);
+      city._hmKey = key;
+    }
+  }
+  return city._hm;
+};
+
+const heightAt = (hm, x, y) => {
+  const fx = Math.min(Math.max(x / hm.res, 0), hm.cols - 1), fy = Math.min(Math.max(y / hm.res, 0), hm.rows - 1),
+    i = Math.min(Math.floor(fx), hm.cols - 2), j = Math.min(Math.floor(fy), hm.rows - 2),
+    u = fx - i, v = fy - j, z = hm.z, c = hm.cols, k = j * c + i;
+  return (z[k] * (1 - u) + z[k + 1] * u) * (1 - v) + (z[k + c] * (1 - u) + z[k + c + 1] * u) * v;
+};
+
+/* Height of the ground at (x, y) in the scene the state is in. */
+const groundZ = (s, x, y) => {
+  if (s.scene != 'city') return 0;
+  if (s.city.mountains && (x < 0 || y < 0 || x > s.city.size[0] || y > s.city.size[1])) return mountainHeight(s.city, x, y);
+  const hm = terrain(s.city);
+  return hm ? heightAt(hm, x, y) : 0;
+};
+
+(window.GSA = window.GSA || {}).physics = { RC, WH, hit, mv, steerTowards, shove, terrain, groundZ, mountainHeight, valleyWall, wallCrest, fbm, wet, steep, inTerrain };</script></script>
+		<script pathHint="engine/ai.js">// /engine/ai.js
+/* awhat a mob knows and what happens to it: factions, senses, spawning,
    drops, damage. What it does about any of that is its MobScript (scripting.js).
 
    A mob is an edict with base.type == 'actor'. Its form (stats from packs.mobs)
@@ -804,7 +1265,8 @@ const getNearestMob = (x, y, f) => {
   attitude, hostile, live, isTarget, combatTargets, sees, emitSound, hurt,
   damageMob, killMob, spawnMob, spawnDrops, getMobsInRadius, getNearestMob
 };</script></script>
-		<script>/* scripting.js — QuakeC entities with Papyrus scripts on top.
+		<script pathHint="engine/scripting.js">// /engine/scripting.js
+/*  QuakeC entities with Papyrus scripts on top.
 
    QUAKEC  (every world object is an edict: one slot of the pool S.edicts, slot 0 is the player)
      spawn(fields), remove(e)            claim and free a slot
@@ -1237,7 +1699,7 @@ function sv_physics(s, dt) {
       e.x += e.vx * dt;
       e.y += e.vy * dt;
       e.z += e.vz * dt;
-      if (!e.free && GSA.physics.hit(s, e.x, e.y, e.z)) e.script.dispatch('OnTouch', null);
+      if (!e.free && (GSA.physics.hit(s, e.x, e.y, e.z) || GSA.physics.inTerrain(s, e.x, e.y, e.z))) e.script.dispatch('OnTouch', null);
     } else if (e.movetype == 'MOVETYPE_WALK') {
       const wall = GSA.physics.mv(s, e, e.vx * dt, e.vy * dt);
       if (wall) {
@@ -1266,7 +1728,8 @@ function sv_physics(s, dt) {
   MAX_EDICTS, Edict, newPool, spawn, remove, T_Damage, Killed, Form, ObjectReference, Actor, Packages, sv_physics,
   PlayerScript, MobScript, SpawnerScript, PickupScript, PortalScript, StationScript, PlasmaBoltScript
 };</script></script>
-		<script>/* render.js — Three.js: static geometry per scene, one mesh per edict that has
+		<script pathHint="engine/render.js">// /engine/render.js
+/* Three.js: static geometry per scene, one mesh per edict that has
    something to show, the follow camera. Reads the state and never changes it,
    apart from the camera-shake timer.
 
@@ -1292,7 +1755,7 @@ const init = canvas => {
   const dl = new THREE.DirectionalLight(0xffffff, .7);
   dl.position.set(8, 20, -6);
   sc.add(dl);
-  cam = new THREE.PerspectiveCamera(50, W / H, .1, 200);
+  cam = new THREE.PerspectiveCamera(50, W / H, .1, 300);
 };
 
 /* The CSS colour tokens, read live so a theme change shows up on the next rebuild. */
@@ -1348,11 +1811,130 @@ const spawnImpactEffect = (x, y) => {
   impacts.push({ m, t: 0 });
 };
 
+/* The heightmap as a mesh: one vertex per grid sample, shaded by height so a kerb reads. */
+const terrainMesh = (city, C) => {
+  const hm = GSA.physics.terrain(city), W = (hm.cols - 1) * hm.res, D = (hm.rows - 1) * hm.res,
+    geo = new THREE.PlaneGeometry(W, D, hm.cols - 1, hm.rows - 1);
+  geo.rotateX(-Math.PI / 2);
+  geo.translate(W / 2, 0, -D / 2);
+  const pos = geo.attributes.position, col = new Float32Array(pos.count * 3), t = new THREE.Color(),
+    lo = new THREE.Color(C.ground), hi = lo.clone().lerp(new THREE.Color(C.fg), .14);
+  for (let iy = 0; iy < hm.rows; iy++)
+    for (let ix = 0; ix < hm.cols; ix++) {
+      const i = iy * hm.cols + ix, h = hm.z[(hm.rows - 1 - iy) * hm.cols + ix];   /* plane row 0 is the north edge */
+      pos.setY(i, h);
+      if (hm.color) {   /* a generated island brings its own colours (sea floor, sand, grass, rock, snow) */
+        const k = ((hm.rows - 1 - iy) * hm.cols + ix) * 3;
+        col[i * 3] = hm.color[k];
+        col[i * 3 + 1] = hm.color[k + 1];
+        col[i * 3 + 2] = hm.color[k + 2];
+      } else t.copy(lo).lerp(hi, hm.max ? Math.min(1, h / hm.max) : 0).toArray(col, i * 3);
+    }
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  geo.computeVertexNormals();
+  return new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true }));
+};
+
+/* The water as one translucent surface over the same grid: a vertex with water is lifted to the water
+   level, any other sits just under the ground, so the shore is where the two surfaces cross. Shallow
+   water is pale and deep water dark. */
+const waterMesh = city => {
+  const hm = GSA.physics.terrain(city), W = (hm.cols - 1) * hm.res, D = (hm.rows - 1) * hm.res,
+    geo = new THREE.PlaneGeometry(W, D, hm.cols - 1, hm.rows - 1);
+  geo.rotateX(-Math.PI / 2);
+  geo.translate(W / 2, 0, -D / 2);
+  const pos = geo.attributes.position, col = new Float32Array(pos.count * 3), shallow = new THREE.Color('#8fd0e0'), deep = new THREE.Color('#1d5f93'), t = new THREE.Color();
+  for (let iy = 0; iy < hm.rows; iy++)
+    for (let ix = 0; ix < hm.cols; ix++) {
+      const i = iy * hm.cols + ix, c = (hm.rows - 1 - iy) * hm.cols + ix, L = hm.level[c], depth = L - hm.z[c];
+      pos.setY(i, L > -1e8 && depth > .03 ? L : hm.z[c] - .4);
+      t.copy(shallow).lerp(deep, smoothstep(0, 5, depth)).toArray(col, i * 3);
+    }
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  geo.computeVertexNormals();
+  return new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: .8, depthWrite: false }));
+};
+
+/* The mountains outside the map: a coarse mesh (1 tile per cell) starting at the crest of the
+   valley wall, plus the wall itself. The triangles over the valley are cut out, so the wall is
+   a true vertical step at the map edge and the player can stand against it. Coloured by
+   height: valley rock, darker rock, snow. */
+const mountainMesh = (city, C) => {
+  const m = city.mountains, [MW, MD] = city.size, R = (m.reach ?? 90) + 10, cell = 1,
+    nx = Math.ceil((MW + 2 * R) / cell), ny = Math.ceil((MD + 2 * R) / cell),
+    geo = new THREE.PlaneGeometry(nx * cell, ny * cell, nx, ny);
+  geo.rotateX(-Math.PI / 2);
+  geo.translate(-R + nx * cell / 2, 0, R - ny * cell / 2);   /* world x from -R, world y from -R */
+  const pos = geo.attributes.position, col = new Float32Array(pos.count * 3), t = new THREE.Color(),
+    low = new THREE.Color(C.ground).lerp(new THREE.Color(C.bld), .8), rock = new THREE.Color(C.bld).multiplyScalar(.6),
+    snow = new THREE.Color('#f4f8fb'), peak = m.peak ?? 60, E = 1e-6;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), y = -pos.getZ(i), inside = x >= 0 && y >= 0 && x <= MW && y <= MD,
+      /* a vertex on the map edge takes the height just outside it: the top of the wall */
+      h = inside ? ((x == 0 || y == 0 || x == MW || y == MD)
+        ? mountainHeight(city, x <= 0 ? x - E : x >= MW ? x + E : x, y <= 0 ? y - E : y >= MD ? y + E : y) : 0)
+        : mountainHeight(city, x, y), u = h / peak;
+    pos.setY(i, h);
+    t.copy(low).lerp(rock, smoothstep(0, .3, u)).lerp(snow, smoothstep(.55, .8, u)).toArray(col, i * 3);
+  }
+  const src = geo.index.array, keep = [];
+  for (let k = 0; k < src.length; k += 3) {   /* drop triangles over the valley floor */
+    const cx = (pos.getX(src[k]) + pos.getX(src[k + 1]) + pos.getX(src[k + 2])) / 3,
+      cy = -(pos.getZ(src[k]) + pos.getZ(src[k + 1]) + pos.getZ(src[k + 2])) / 3;
+    if (!(cx > 0 && cx < MW && cy > 0 && cy < MD)) keep.push(src[k], src[k + 1], src[k + 2]);
+  }
+  geo.setIndex(keep);
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  geo.computeVertexNormals();
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true })));
+  g.add(wallMesh(city, C));
+  return g;
+};
+
+/* The valley wall: a vertical sheet along each map edge from the floor up to wallCrest, 0.5
+   tile columns by 16 rows. Noise pushes patches of it outward (never into the valley) and tints
+   it in bands, so it reads as rough stone without ever standing off from the player. */
+const wallMesh = (city, C) => {
+  const [MW, MD] = city.size, seed = city.mountains.seed ?? 1, NV = 16,
+    dark = new THREE.Color(C.bld).multiplyScalar(.7), lite = new THREE.Color(C.bld).lerp(new THREE.Color('#ffffff'), .15), t = new THREE.Color(),
+    edges = [[0, 0, 1, 0, 0, -1, MW], [0, MD, 1, 0, 0, 1, MW], [0, 0, 0, 1, -1, 0, MD], [MW, 0, 0, 1, 1, 0, MD]],   /* start, along, outward, length */
+    pos = [], col = [], idx = [];
+  for (const [ax, ay, ux, uy, ox, oy, L] of edges) {
+    const nu = Math.ceil(L / .5), base = pos.length / 3;
+    for (let i = 0; i <= nu; i++) {
+      const u = i / nu * L, bx = ax + ux * u, by = ay + uy * u, crest = GSA.physics.wallCrest(city, bx, by);
+      for (let j = 0; j <= NV; j++) {
+        const z = j / NV * crest,
+          fade = smoothstep(0, 2, z) * (1 - smoothstep(crest - 1.5, crest, z)) * smoothstep(0, 2, Math.min(u, L - u)),
+          off = fade * .35 * smoothstep(.4, .7, GSA.physics.fbm(u * .5, z * .6, seed + 21));
+        pos.push(bx + ox * off, z, -(by + oy * off));
+        t.copy(dark).lerp(lite, GSA.physics.fbm(u * .6 + 3, z * 1.4, seed + 33)).toArray(col, col.length);
+      }
+    }
+    for (let i = 0; i < nu; i++)
+      for (let j = 0; j < NV; j++) {
+        const a = base + i * (NV + 1) + j, b = a + 1, c = a + NV + 1, d = c + 1;
+        idx.push(a, c, b, b, c, d);
+      }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  return new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }));
+};
+const smoothstep = (a, b, x) => { const k = Math.min(Math.max((x - a) / (b - a), 0), 1); return k * k * (3 - 2 * k); };
+
 /* Static geometry for the scene the player is in: ground, walls, water, bridges,
    stations, labels and portal rings. Edict meshes are dropped and recreated by the
    next draw(). */
 function build(s) {
-  if (grp) sc.remove(grp);
+  if (grp) {
+    sc.remove(grp);
+    grp.traverse(o => o.geometry && o.geometry.dispose());   /* the terrain meshes are big */
+  }
   grp = new THREE.Group();
   sc.add(grp);
   impacts = [];
@@ -1361,7 +1943,12 @@ function build(s) {
   const inI = s.scene == 'int', C = tok(), wh = GSA.physics.WH(s),
     slab = ([x, y, w, d], h, z, color) => put(grp, new THREE.BoxGeometry(w, h, d), color, x + w / 2, y + d / 2, z);
   sc.background = new THREE.Color(C.bg);
-  put(grp, new THREE.BoxGeometry(s.size[0], .2, s.size[1]), C.ground, s.size[0] / 2, s.size[1] / 2, -.1);
+  if (!inI && s.city.mountains) grp.add(mountainMesh(s.city, C));
+  if (!inI && GSA.physics.terrain(s.city)) {
+    grp.add(terrainMesh(s.city, C));
+    if (GSA.physics.terrain(s.city).level) grp.add(waterMesh(s.city));
+  }
+  else put(grp, new THREE.BoxGeometry(s.size[0], .2, s.size[1]), C.ground, s.size[0] / 2, s.size[1] / 2, -.1);
   s.walls.forEach(r => slab(r, wh, wh / 2, C.bld));
 
   if (!inI) {
@@ -1379,7 +1966,8 @@ function build(s) {
       grp.add(l);
     });
   }
-  portalList(s).forEach(({ k, at }) => put(grp, new THREE.CylinderGeometry(.8, .8, .08, 20), !inI && k == 'front' ? C.cop : C.acc, at[0], at[1], .05));
+  portalList(s).forEach(({ k, at }) => put(grp, new THREE.CylinderGeometry(.8, .8, .08, 20), !inI && k == 'front' ? C.cop : C.acc, at[0], at[1],
+    .05 + Math.max(...[[0, 0], [.8, 0], [-.8, 0], [0, .8], [0, -.8]].map(([a, b]) => GSA.physics.groundZ(s, at[0] + a, at[1] + b)))));
 
   grp.add(pm);
   beamM = put(grp, new THREE.BoxGeometry(.3, .3, 9), '#7fe3ff', 0, 0, 0);
@@ -1395,11 +1983,11 @@ function build(s) {
 const KIND = {
   actor: {
     make: e => put(grp, new THREE.CylinderGeometry(.35, .35, 1.2, 10), e.base.color || '#c33', e.x, e.y, .6),
-    pose: (e, o) => o.position.set(e.x, .6, -e.y)
+    pose: (e, o) => o.position.set(e.x, .6 + GSA.physics.groundZ(GSA.state(), e.x, e.y), -e.y)
   },
   item: {
     make: e => put(grp, new THREE.OctahedronGeometry(.4), e.base.color || '#ffd166', e.x, e.y, .7),
-    pose: (e, o) => { o.position.set(e.x, .7, -e.y); o.rotation.y += .04; }
+    pose: (e, o) => { o.position.set(e.x, .7 + GSA.physics.groundZ(GSA.state(), e.x, e.y), -e.y); o.rotation.y += .04; }
   },
   projectile: {
     make: e => {
@@ -1423,7 +2011,10 @@ const KIND = {
     },
     pose: (e, o) => {
       o.position.set(e.x, e.z, -e.y);
+      o.rotation.order = 'YXZ';   /* yaw, then nose up/down, then lean */
       o.rotation.y = Math.PI - e.heading;
+      o.rotation.x = -(e.pitch || 0);
+      o.rotation.z = e.roll || 0;
     }
   }
 };
@@ -1493,19 +2084,25 @@ function draw(s, Y, Pt, dt) {
   }
 
   /* camera: behind the player along the view bearing, looking at them */
-  const D = 13, cp = Math.cos(Pt);
-  cam.position.lerp(new THREE.Vector3(p.x - Math.sin(Y) * cp * D, Math.sin(Pt) * D + p.z * .5, -(p.y - Math.cos(Y) * cp * D)), .2);
+  const D = 13, cp = Math.cos(Pt),
+    gz = s.scene == 'city' ? GSA.physics.groundZ(s, p.x, p.y) : 0, cz = gz + (p.z - gz) * .5;   /* follow the ground fully, a jump by half */
+  cam.position.lerp(new THREE.Vector3(p.x - Math.sin(Y) * cp * D, Math.sin(Pt) * D + cz, -(p.y - Math.cos(Y) * cp * D)), .2);
+  if (s.scene == 'city' && s.city.mountains) {   /* the camera stays in the valley, not inside the wall */
+    cam.position.x = Math.min(Math.max(cam.position.x, .4), s.size[0] - .4);
+    cam.position.z = Math.min(Math.max(cam.position.z, .4 - s.size[1]), -.4);
+  }
   if (s.shk > 0) {
     s.shk -= .016;
     cam.position.x += (Math.random() - .5) * s.shk * 3;
     cam.position.y += (Math.random() - .5) * s.shk * 3;
   }
-  cam.lookAt(p.x, p.z * .5 + .5, -p.y);
+  cam.lookAt(p.x, cz + .5, -p.y);
   ren.render(sc, cam);
 }
 
 (window.GSA = window.GSA || {}).render = { init, draw, setRace, release, spawnImpactEffect, tok, get renderer() { return ren; } };</script></script>
-		<script>/* ui.js — HUD text, weapon wheel, inventory modal, item actions, and the keys
+		<script pathHint="engine/ui.js">// /engine/ui.js
+/* HUD text, weapon wheel, inventory modal, item actions, and the keys
    that drive them (Tab, 1-9, I). Owns the 2D canvas wheel and the HTML bag
    overlay. Never touches the Three.js scenegraph. */
 
@@ -1861,7 +2458,8 @@ addEventListener('blur', () => wheelClose(false));
   hud,
   slowmo: SLOWMO
 };</script></script>
-		<script>/* engine.js — game state, the per-frame update, and the main loop. It knows
+		<script pathHint="engine/engine.js">// /engine/engine.js
+/* game state, the per-frame update, and the main loop. It knows
    nothing about how the player moves or what a car is: that is data/ (see
    data/mario64.js and data/gtav.js).
 
@@ -1951,6 +2549,7 @@ function start(o = {}) {
     race = packs.races[opts.race],
     B = bindSite(mission, city);
   GSA.render.setRace(race);
+  GSA.physics.terrain(city, true);
 
   S = {
     city, I, B, race, interior: opts.interior, log: [...B.log],
@@ -2036,7 +2635,7 @@ function fire(s, dt) {
   } else if (w.weapon_type == 'bolt' && tap) {
     spawn({
       base: { type: 'projectile', key: 'plasma_bolt', damage: w.damage },
-      x: p.x, y: p.y, z: .9, vx: ax * w.speed, vy: ay * w.speed, radius: .2, owner: p,
+      x: p.x, y: p.y, z: (p.z || 0) + .9, vx: ax * w.speed, vy: ay * w.speed, radius: .2, owner: p,
       movetype: 'MOVETYPE_FLY', solid: 'SOLID_TRIGGER', script: PlasmaBoltScript
     });
     ai.emitSound(p.x, p.y, 10, 3);
@@ -2134,7 +2733,8 @@ Object.assign(window.GSA, {
   state: () => S,
   start
 });</script></script>
-		<script>/* data/mario64.js — Super Mario 64 movement for the player.
+		<script pathHint="data/mario64.js">// /data/mario64.js
+/*  Super Mario 64 movement for the player.
  
    This is a QuakeC PlayerPreThink: the engine calls it every frame, before anything
    moves, with the player edict. It reads the buttons and the camera (self.v_angle),
@@ -2153,7 +2753,7 @@ Object.assign(window.GSA, {
    Races (packs.races) supply speed, gravity and jumpV. Needs data/ loaded after
    physics.js and scripting.js, before engine.js. */
 (() => {
-  const { RC, WH } = GSA.physics;
+  const { RC, WH, groundZ } = GSA.physics;
  
   const appr = (p, tx, ty, d) => {
     const dx = tx - p.vx, dy = ty - p.vy, m = Math.hypot(dx, dy);
@@ -2175,7 +2775,7 @@ Object.assign(window.GSA, {
       p = s.p, r = s.race, sp = r.speed, top = WH(s),
       wl = Math.hypot(mx, my),
       u = Math.hypot(p.vx, p.vy),
-      flr = () => p.z >= top - .2 && RC(p.x, p.y, ws) ? top : 0,
+      flr = () => p.z >= top - .2 && RC(p.x, p.y, ws) ? top : groundZ(s, p.x, p.y),
       launch = (vy, spin, ctl, cut) => {
         p.vz = vy;
         p.st = 'air';
@@ -2187,7 +2787,8 @@ Object.assign(window.GSA, {
     if (wl && (p.st == 'ground' || p.st == 'air')) p.heading = Math.atan2(mx, my);
     const fx = Math.sin(p.heading), fy = Math.cos(p.heading),
       f0 = flr(),
-      gnd = p.z <= f0 && p.vz <= 0;
+      /* walking, you step down a kerb instead of falling off it */
+      gnd = p.z <= f0 + (p.st == 'ground' || p.st == 'slide' ? .3 : 0) && p.vz <= 0;
     let landed = false;
     if (gnd) {
       p.land += dt;
@@ -2288,7 +2889,7 @@ Object.assign(window.GSA, {
     }
     if (!gnd || p.vz > 0) {
       const h0 = p.z,
-        fl = h0 >= top - .2 && RC(p.x, p.y, ws) ? top : 0;
+        fl = h0 >= top - .2 && RC(p.x, p.y, ws) ? top : groundZ(s, p.x, p.y);
       if (p.st == 'hang') {
         p.tm -= dt;
         p.vz = 0;
@@ -2414,7 +3015,8 @@ Object.assign(window.GSA, {
  
   window.PlayerPreThink = PlayerPreThink;
 })();</script></script>
-		<script>/* data/gtav.js — a drivable car, GTA style.
+		<script pathHint="data/gtav.js">// /data/gtav.js
+/* a drivable car, GTA style.
 
    The car is an edict like any other (base.type 'vehicle'), placed when the game
    starts. Its script, CarScript, has two states:
@@ -2430,7 +3032,7 @@ Object.assign(window.GSA, {
    base.build, the same way a race draws its avatar. Needs data/ loaded after
    physics.js and scripting.js, before engine.js. */
 (() => {
-  const { RC, hit } = GSA.physics;
+  const { RC, hit, groundZ } = GSA.physics;
 
   /* A red body with a dark cabin, front towards +z. */
   const carModel = a => {
@@ -2444,6 +3046,7 @@ Object.assign(window.GSA, {
     constructor(self) {
       super(self);
       self.speed = 0;
+      self.pitch = self.roll = 0;
       this.driver = null;
       this.states = {
         Parked: {
@@ -2498,7 +3101,8 @@ Object.assign(window.GSA, {
 
       const nx = c.x + Math.sin(c.heading) * c.speed * dt,
         ny = c.y + Math.cos(c.heading) * c.speed * dt;
-      if (nx < .9 || nx > s.size[0] - .9 || ny < .9 || ny > s.size[1] - .9 || RC(nx, ny, s.walls.concat(s.city.water || []), .9)) c.speed *= -.3;
+      if (nx < .9 || nx > s.size[0] - .9 || ny < .9 || ny > s.size[1] - .9 || RC(nx, ny, s.walls.concat(s.city.water || []), .9) ||
+        GSA.physics.wet(s, nx, ny, c.z || 0) || GSA.physics.steep(s, c.x, c.y, nx, ny, Math.max(c.z || 0, c.gz ?? 0))) c.speed *= -.3;
       else {
         c.x = nx;
         c.y = ny;
@@ -2509,17 +3113,45 @@ Object.assign(window.GSA, {
         for (const m of GSA.ai.live(s))
           if (dist([m.x, m.y], [c.x, c.y]) < 1.5 && GSA.ai.hostile(m, s)) T_Damage(m, c, d, Infinity);
 
+      this.ride(s, dt);
       d.x = c.x;
       d.y = c.y;
+      d.z = c.z;
+    }
+
+    /* Ride the heightmap. Each wheel reads the ground under it; the body follows their average on a
+       spring, tilts to match, and a step up (a kerb) costs speed and kicks the car into a hop.
+       When the ground falls away faster than the spring can follow, gravity takes over. */
+    ride(s, dt) {
+      const c = this.self, h = c.heading, fx = Math.sin(h), fy = Math.cos(h), rx = Math.cos(h), ry = -Math.sin(h),
+        g = (a, b) => groundZ(s, c.x + rx * a + fx * b, c.y + ry * a + fy * b),
+        fl = g(-.6, .9), fr = g(.6, .9), rl = g(-.6, -.9), rr = g(.6, -.9),
+        tgt = (fl + fr + rl + rr) / 4, up = tgt - (c.gz ?? tgt);
+      c.gz = tgt;
+      if (up > .02) {
+        c.vz = (c.vz || 0) + up * Math.abs(c.speed) * 3;
+        c.speed *= 1 - clamp(up * 3, 0, .3);
+      }
+      c.vz = c.vz || 0;
+      if (c.z > tgt + .04) c.vz -= 30 * dt;
+      else c.vz += (400 * (tgt - c.z) - 24 * c.vz) * dt;
+      c.z += c.vz * dt;
+      if (c.z < tgt - .12) {
+        c.z = tgt - .12;
+        c.vz = Math.max(c.vz, 0);
+      }
+      const k = Math.min(1, 12 * dt);
+      c.pitch += (Math.atan2((fl + fr) / 2 - (rl + rr) / 2, 1.8) - c.pitch) * k;
+      c.roll += (Math.atan2((fl + rl) / 2 - (fr + rr) / 2, 1.2) - c.roll) * k;
     }
   }
 
   GSA.bus.on('start', ({ S }) => {
     const at = S.city.car || [24.5, 13];
-    spawn({ base: { type: 'vehicle', key: 'car', build: carModel }, x: at[0], y: at[1], heading: 0, radius: .9, sc: 'city', script: CarScript });
+    spawn({ base: { type: 'vehicle', key: 'car', build: carModel }, x: at[0], y: at[1], z: groundZ({ scene: 'city', city: S.city }, at[0], at[1]), heading: 0, radius: .9, sc: 'city', script: CarScript });
   });
 })();</script></script>
-		<script>// data/terminal-velocity.js
+		<script pathHint="data/terminal-velocity.js">// /data/terminal-velocity.js
 /*  a spaceship you board with E, and a Terminal Velocity style sortie.
 
    The ship is built like the car (data/gtav.js): a vehicle edict placed when the game
@@ -3403,7 +4035,7 @@ Object.assign(window.GSA, {
   GSA.bus.on('start', ({ S: s }) => {
     abandon();   /* a restart while flying */
     const at = s.city.ship || [22, 20];
-    spawn({ base: { type: 'vehicle', key: 'ship', build: parkedModel }, x: at[0], y: at[1], heading: 0, radius: 1.8, sc: 'city', script: ShipScript });
+    spawn({ base: { type: 'vehicle', key: 'ship', build: parkedModel }, x: at[0], y: at[1], z: GSA.physics.groundZ({ scene: 'city', city: s.city }, at[0], at[1]), heading: 0, radius: 1.8, sc: 'city', script: ShipScript });
   });
   GSA.sortie = { state: () => fl };
 })();</script></script>
