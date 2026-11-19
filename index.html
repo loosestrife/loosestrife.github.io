@@ -106,7 +106,7 @@
 			<div>Race: <button onclick="GSA.start({race:'nord'})">Nord</button><button onclick="GSA.start({race:'elf'})">Elf</button><button onclick="GSA.start({race:'martian'})">Martian</button></div>
 			<div>Interior: <button onclick="GSA.start({interior:'stock'})">Stock data center</button><button onclick="GSA.start({interior:'zombie'})">Zombie data center</button></div>
 			<pre id="log"></pre>
-			<p style="font-size:13px;opacity:.7">Click the game to capture the mouse (Esc releases; dragging also turns the camera). The mouse turns the camera and WASD moves relative to it. Space jumps, and Space again while airborne against a wall wall-jumps. Nord: jump, then C or Shift to ground pound. Elf: hold click or F for the frost beam. Martian: click or F fires plasma. Press E next to the red car to drive (W/S throttle, A/D steer, E exits); you can run cops over, and only the embassy door works from the car. Test Valley also has a gather-and-craft loop: pick up the luna moth wing (southeast) and ice wraith teeth (northwest), press E at the Alchemy Station (southeast) to brew, then Q to drink: cops and zombies lose you for 25 seconds. Press E next to the Starfighter (north of the start) to fly a sortie: mouse or A/D steer, Space and Shift climb and dive, W boosts, S brakes, click or F fires lasers, R fires a homing missile, E twice leaves. Drink the invisibility potion (Q) and the Dreadnought at the end of the canyon can no longer see you: it only shoots at the last place it saw you shoot from, marked in red. San Medici di Skyrim is an island generated from a seed: one big mountain, a stream that starts high up and feeds a lake, then a river into a bay on the south coast. Ground steeper than about 50 degrees acts as a wall (you can wall-jump off it), you can wade streams but not rivers, the lake or the sea, and bolts stop at the ground. Plug in content from the console, for example <code>GSA.packs.races.mine = {...}</code> then <code>GSA.start({race:'mine'})</code>. Engine events such as <code>in:front</code>, <code>out:back</code>, <code>deliver</code> and <code>alarm_raised</code> go through a global bus, so hook them from the console with <code>GSA.bus.on('alarm_raised', (ctx) => ...)</code> (the callback receives the live state plus <code>ctx.heat(d)</code>).</p>
+			<p style="font-size:13px;opacity:.7">Click the game to capture the mouse (Esc releases; dragging also turns the camera). The mouse turns the camera and WASD moves relative to it. Space jumps, and Space again while airborne against a wall wall-jumps. Nord: jump, then C or Shift to ground pound. Elf: hold click or F for the frost beam. Martian: click or F fires plasma. Press E next to the red car to drive (W/S throttle, A/D steer, E exits); you can run cops over, and only the embassy door works from the car. Test Valley also has a gather-and-craft loop: pick up the luna moth wing (southeast) and ice wraith teeth (northwest), press E at the Alchemy Station (southeast) to brew, then Q to drink: cops and zombies lose you for 25 seconds. Press E next to the Starfighter (north of the start) to fly a sortie: mouse or A/D steer, Space and Shift climb and dive, W boosts, S brakes, click or F fires lasers, R fires a homing missile, E twice leaves. Drink the invisibility potion (Q) and the Dreadnought at the end of the canyon can no longer see you: it only shoots at the last place it saw you shoot from, marked in red. Plug in content from the console, for example <code>GSA.packs.races.mine = {...}</code> then <code>GSA.start({race:'mine'})</code>. Engine events such as <code>in:front</code>, <code>out:back</code>, <code>deliver</code> and <code>alarm_raised</code> go through a global bus, so hook them from the console with <code>GSA.bus.on('alarm_raised', (ctx) => ...)</code> (the callback receives the live state plus <code>ctx.heat(d)</code>).</p>
 		</main>
 		<!-- Libraries -->
 		<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -437,40 +437,269 @@ const packs = {
 				r: [4, 4, 6, 5]
 			}]
 		},
-		/* An island made from a seed (see generateIsland in engine/physics.js): one big mountain, a stream
-		   that starts near its top, feeds a lake and becomes a river, and a bay on the south coast. The
-		   ocean all round is the edge of the map. Sites sit on flat pads the generator cuts for them. */
+		/* A continent the size of Skyrim from a seed (see generateWorld): ice in the north, desert in the south, forest in the
+		   west backed by a mountain range along the west edge, swamp in the east, one huge mountain in the middle, ocean
+		   round the other coasts. A city in each biome (Lothlorien in the forest, Saint Denis in the swamp, Winterhold on
+		   the ice, Sandy Shores in the desert), each on a flat pad with a road grid painted on it, a data center and an
+		   embassy to run missions between, and a block of buildings round them. */
 		medici: {
 			name: 'San Medici di Skyrim',
-			size: [200, 160],
-			island: { seed: 1521, streamFlow: 1500 },
-			spawn: [150, 56.5],
-			car: [153, 56.5],
-			ship: [146, 56.5],
-			sites: [{
-				id: 'dc_east',
-				type: 'data_center',
-				name: 'Cantina Data Center',
-				r: [146, 62, 8, 5]
-			}, {
-				id: 'emb_cn',
-				type: 'embassy',
-				nation: 'china',
-				name: 'Chinese Embassy',
-				r: [137, 52, 6, 5]
-			}, {
-				id: 'dc_west',
-				type: 'data_center',
-				name: 'Skyrim Server Hall',
-				r: [52, 52, 8, 5]
-			}, {
-				id: 'emb_fr',
-				type: 'embassy',
-				nation: 'france',
-				name: 'French Embassy',
-				r: [56, 67, 6, 5]
-			}]
-		}
+			size: [6000, 6000],
+			world: { seed: 1521 },
+			spawn: [1244, 2916],
+			car: [1252, 2914],
+			ship: [1220, 2916],
+			routes: [
+				{ kind: 'highway', from: 'Lothlorien', to: 'Sandy Shores' }, { kind: 'highway', from: 'Sandy Shores', to: 'Saint Denis' },
+				{ kind: 'highway', from: 'Saint Denis', to: 'Winterhold' }, { kind: 'highway', from: 'Winterhold', to: 'Lothlorien' },
+				{ kind: 'rail', from: 'Lothlorien', to: 'Saint Denis' }, { kind: 'rail', from: 'Sandy Shores', to: 'Winterhold' }
+			],
+			pads: [[1200, 2850, 170, 130], [4825, 3550, 170, 130], [3375, 4975, 170, 130], [3225, 1150, 170, 130]],
+			parked: [
+				['truck', 1319.7, 2911.8, 1.53, '#d68910'],
+				['van', 1290.2, 2896.4, 0.04, '#cfd3d6'],
+				['car', 1302.3, 2920.2, -1.53, '#4a9d6f'],
+				['truck', 1281.8, 2962.0, 3.19, '#d68910'],
+				['car', 1359.7, 2920.2, -1.57, '#4a9d6f'],
+				['truck', 1281.8, 2969.9, 3.16, '#2c3e50'],
+				['car', 1281.8, 2906.7, 3.18, '#e0b83a'],
+				['car', 1290.2, 2970.6, -0.02, '#e0b83a'],
+				['car', 1316.2, 2920.2, -1.59, '#3b6fa0'],
+				['car', 1213.0, 2911.8, 1.63, '#8a8d93'],
+				['car', 1361.0, 2911.8, 1.54, '#4a9d6f'],
+				['van', 1270.3, 2920.2, -1.53, '#d9a441'],
+				['car', 1304.8, 2911.8, 1.58, '#8a8d93'],
+				['moto', 1281.8, 2861.3, 3.12, '#c1121f'],
+				['van', 1345.9, 2911.8, 1.59, '#4b6a88'],
+				['van', 1281.8, 2899.0, 3.14, '#d9a441'],
+				['car', 4906.8, 3594.0, 3.09, '#2f2f35'],
+				['car', 4921.5, 3620.2, -1.58, '#8a8d93'],
+				['van', 4935.5, 3620.2, -1.52, '#d9a441'],
+				['moto', 4837.3, 3620.2, -1.52, '#c1121f'],
+				['moto', 4915.2, 3632.5, -0.06, '#c1121f'],
+				['van', 4915.2, 3565.2, -0.05, '#cfd3d6'],
+				['car', 4915.2, 3640.3, -0.04, '#3b6fa0'],
+				['car', 4974.8, 3620.2, -1.59, '#3b6fa0'],
+				['car', 4892.8, 3611.8, 1.53, '#e0b83a'],
+				['car', 4932.1, 3611.8, 1.63, '#3b6fa0'],
+				['moto', 4882.2, 3620.2, -1.59, '#222222'],
+				['truck', 4988.9, 3611.8, 1.54, '#d68910'],
+				['truck', 4980.9, 3611.8, 1.52, '#d68910'],
+				['car', 4906.8, 3633.9, 3.11, '#f2f2f2'],
+				['car', 4906.8, 3641.5, 3.13, '#8a8d93'],
+				['car', 4837.9, 3611.8, 1.57, '#3b6fa0'],
+				['snowmobile', 3456.8, 5051.6, 3.18, '#2a9d8f'],
+				['snowmobile', 3526.7, 5036.8, 1.61, '#e63946'],
+				['truck', 3465.2, 4992.9, 0.03, '#7f8c8d'],
+				['snowmobile', 3495.5, 5036.8, 1.63, '#2a9d8f'],
+				['snowmobile', 3381.1, 5036.8, 1.52, '#f1faee'],
+				['snowmobile', 3465.2, 5059.1, -0.05, '#e63946'],
+				['snowmobile', 3465.2, 5030.9, 0.06, '#f1faee'],
+				['van', 3456.8, 5016.6, 3.14, '#4b6a88'],
+				['snowmobile', 3456.8, 4992.8, 3.09, '#1d6fb8'],
+				['snowmobile', 3465.2, 5066.7, 0.02, '#1d6fb8'],
+				['truck', 3443.1, 5036.8, 1.56, '#c0392b'],
+				['snowmobile', 3456.8, 5097.1, 3.17, '#e63946'],
+				['truck', 3470.9, 5036.8, 1.62, '#c0392b'],
+				['snowmobile', 3465.2, 5019.7, 0.01, '#2a9d8f'],
+				['truck', 3451.4, 5045.2, -1.58, '#c0392b'],
+				['truck', 3456.8, 5066.5, 3.17, '#7f8c8d'],
+				['convertible', 3315.2, 1227.2, 0.02, '#f77f00'],
+				['convertible', 3306.8, 1266.3, 3.14, '#ffb703'],
+				['convertible', 3298.6, 1220.2, -1.6, '#2ec4b6'],
+				['van', 3251.9, 1220.2, -1.59, '#d9a441'],
+				['convertible', 3328.0, 1211.8, 1.6, '#8ecae6'],
+				['convertible', 3281.3, 1220.2, -1.63, '#ff6f91'],
+				['convertible', 3384.0, 1211.8, 1.51, '#2ec4b6'],
+				['convertible', 3315.2, 1156.0, -0.0, '#ffb703'],
+				['convertible', 3333.8, 1220.2, -1.55, '#e63946'],
+				['van', 3315.2, 1193.2, -0.06, '#cfd3d6'],
+				['moto', 3373.9, 1220.2, -1.59, '#222222'],
+				['convertible', 3306.8, 1203.9, 3.14, '#e63946'],
+				['convertible', 3346.6, 1220.2, -1.59, '#e63946'],
+				['convertible', 3286.9, 1211.8, 1.56, '#e63946'],
+				['moto', 3306.8, 1160.6, 3.12, '#c1121f'],
+				['convertible', 3306.8, 1273.8, 3.18, '#f77f00']
+			],
+			places: [{ name: 'Lothlorien', at: [1285, 2915] }, { name: 'Saint Denis', at: [4910, 3615] }, { name: 'Winterhold', at: [3460, 5040] }, { name: 'Sandy Shores', at: [3310, 1215] }],
+			roads: [
+				[1200, 2910, 170, 12],
+				[1280, 2850, 12, 130],
+				[1200, 2874, 170, 8],
+				[1200, 2948, 170, 8],
+				[1232, 2850, 8, 130],
+				[1330, 2850, 8, 130],
+				[4825, 3610, 170, 12],
+				[4905, 3550, 12, 130],
+				[4825, 3574, 170, 8],
+				[4825, 3648, 170, 8],
+				[4857, 3550, 8, 130],
+				[4955, 3550, 8, 130],
+				[3375, 5035, 170, 12],
+				[3455, 4975, 12, 130],
+				[3375, 4999, 170, 8],
+				[3375, 5073, 170, 8],
+				[3407, 4975, 8, 130],
+				[3505, 4975, 8, 130],
+				[3225, 1210, 170, 12],
+				[3305, 1150, 12, 130],
+				[3225, 1174, 170, 8],
+				[3225, 1248, 170, 8],
+				[3257, 1150, 8, 130],
+				[3355, 1150, 8, 130]
+			],
+			sites: [
+				{ id: 'dc_lothlorien', type: 'data_center', name: 'Lothlorien Data Center', r: [1244, 2928, 8, 5] },
+				{ id: 'emb_lothlorien', type: 'embassy', nation: 'china', name: 'Lothlorien Chinese Embassy', r: [1262, 2928, 6, 5] },
+				{ type: 'building', r: [1207, 2885, 9, 8] },
+				{ type: 'building', r: [1219, 2885, 9, 8] },
+				{ type: 'building', r: [1207, 2896, 9, 9] },
+				{ type: 'building', r: [1219, 2896, 9, 9] },
+				{ type: 'building', r: [1207, 2925, 10, 10] },
+				{ type: 'building', r: [1207, 2938, 9, 6] },
+				{ type: 'building', r: [1219, 2938, 8, 6] },
+				{ type: 'building', r: [1207, 2959, 12, 10] },
+				{ type: 'building', r: [1243, 2857, 9, 6] },
+				{ type: 'building', r: [1255, 2857, 12, 6] },
+				{ type: 'building', r: [1243, 2885, 14, 7] },
+				{ type: 'building', r: [1260, 2885, 12, 7] },
+				{ type: 'building', r: [1243, 2895, 14, 8] },
+				{ type: 'building', r: [1254, 2959, 8, 10] },
+				{ type: 'building', r: [1265, 2959, 9, 10] },
+				{ type: 'building', r: [1295, 2857, 9, 8] },
+				{ type: 'building', r: [1307, 2857, 14, 8] },
+				{ type: 'building', r: [1312, 2885, 9, 10] },
+				{ type: 'building', r: [1312, 2898, 10, 7] },
+				{ type: 'building', r: [1307, 2925, 12, 6] },
+				{ type: 'building', r: [1295, 2934, 9, 9] },
+				{ type: 'building', r: [1307, 2934, 8, 9] },
+				{ type: 'building', r: [1318, 2934, 8, 9] },
+				{ type: 'building', r: [1295, 2959, 14, 7] },
+				{ type: 'building', r: [1312, 2959, 10, 7] },
+				{ type: 'building', r: [1341, 2857, 14, 7] },
+				{ type: 'building', r: [1341, 2885, 9, 8] },
+				{ type: 'building', r: [1341, 2896, 14, 8] },
+				{ type: 'building', r: [1341, 2925, 10, 8] },
+				{ type: 'building', r: [1354, 2925, 9, 8] },
+				{ type: 'building', r: [1341, 2936, 8, 7] },
+				{ type: 'building', r: [1341, 2959, 10, 10] },
+				{ id: 'dc_saint_denis', type: 'data_center', name: 'Saint Denis Data Center', r: [4869, 3628, 8, 5] },
+				{ id: 'emb_saint_denis', type: 'embassy', nation: 'china', name: 'Saint Denis Chinese Embassy', r: [4887, 3628, 6, 5] },
+				{ type: 'building', r: [4832, 3557, 8, 10] },
+				{ type: 'building', r: [4843, 3557, 8, 10] },
+				{ type: 'building', r: [4832, 3585, 14, 10] },
+				{ type: 'building', r: [4832, 3598, 8, 10] },
+				{ type: 'building', r: [4843, 3598, 9, 10] },
+				{ type: 'building', r: [4832, 3625, 8, 9] },
+				{ type: 'building', r: [4843, 3625, 9, 9] },
+				{ type: 'building', r: [4832, 3637, 10, 8] },
+				{ type: 'building', r: [4845, 3637, 9, 8] },
+				{ type: 'building', r: [4832, 3659, 8, 8] },
+				{ type: 'building', r: [4843, 3659, 9, 8] },
+				{ type: 'building', r: [4868, 3557, 9, 7] },
+				{ type: 'building', r: [4880, 3557, 9, 7] },
+				{ type: 'building', r: [4868, 3585, 12, 10] },
+				{ type: 'building', r: [4883, 3585, 10, 10] },
+				{ type: 'building', r: [4868, 3598, 12, 6] },
+				{ type: 'building', r: [4883, 3598, 10, 6] },
+				{ type: 'building', r: [4868, 3638, 10, 8] },
+				{ type: 'building', r: [4881, 3638, 12, 8] },
+				{ type: 'building', r: [4868, 3659, 12, 10] },
+				{ type: 'building', r: [4883, 3659, 9, 10] },
+				{ type: 'building', r: [4920, 3557, 9, 7] },
+				{ type: 'building', r: [4932, 3557, 8, 7] },
+				{ type: 'building', r: [4920, 3585, 9, 6] },
+				{ type: 'building', r: [4932, 3585, 8, 6] },
+				{ type: 'building', r: [4937, 3594, 8, 8] },
+				{ type: 'building', r: [4935, 3625, 8, 8] },
+				{ type: 'building', r: [4920, 3636, 14, 6] },
+				{ type: 'building', r: [4937, 3636, 12, 6] },
+				{ type: 'building', r: [4920, 3659, 14, 9] },
+				{ type: 'building', r: [4937, 3659, 9, 9] },
+				{ type: 'building', r: [4966, 3557, 8, 7] },
+				{ type: 'building', r: [4977, 3557, 9, 7] },
+				{ type: 'building', r: [4966, 3585, 9, 9] },
+				{ type: 'building', r: [4966, 3597, 9, 9] },
+				{ type: 'building', r: [4966, 3625, 12, 6] },
+				{ type: 'building', r: [4966, 3659, 8, 9] },
+				{ type: 'building', r: [4977, 3659, 8, 9] },
+				{ id: 'dc_winterhold', type: 'data_center', name: 'Winterhold Data Center', r: [3419, 5053, 8, 5] },
+				{ id: 'col_winterhold', name: 'Winterhold Mages College', r: [3437, 5053, 6, 5] },
+				{ type: 'building', r: [3382, 4982, 14, 6] },
+				{ type: 'building', r: [3382, 4991, 10, 6] },
+				{ type: 'building', r: [3382, 5010, 8, 6] },
+				{ type: 'building', r: [3382, 5019, 8, 8] },
+				{ type: 'building', r: [3393, 5019, 10, 8] },
+				{ type: 'building', r: [3382, 5050, 12, 6] },
+				{ type: 'building', r: [3382, 5059, 12, 10] },
+				{ type: 'building', r: [3382, 5084, 14, 10] },
+				{ type: 'building', r: [3418, 4982, 12, 6] },
+				{ type: 'building', r: [3433, 4982, 8, 6] },
+				{ type: 'building', r: [3429, 5010, 14, 10] },
+				{ type: 'building', r: [3418, 5023, 10, 9] },
+				{ type: 'building', r: [3431, 5023, 8, 9] },
+				{ type: 'building', r: [3418, 5062, 14, 7] },
+				{ type: 'building', r: [3435, 5062, 14, 7] },
+				{ type: 'building', r: [3418, 5084, 9, 7] },
+				{ type: 'building', r: [3430, 5084, 14, 7] },
+				{ type: 'building', r: [3470, 4982, 8, 7] },
+				{ type: 'building', r: [3481, 4982, 14, 7] },
+				{ type: 'building', r: [3470, 5010, 14, 8] },
+				{ type: 'building', r: [3487, 5010, 8, 8] },
+				{ type: 'building', r: [3487, 5021, 9, 10] },
+				{ type: 'building', r: [3483, 5050, 12, 9] },
+				{ type: 'building', r: [3470, 5062, 10, 9] },
+				{ type: 'building', r: [3483, 5062, 10, 9] },
+				{ type: 'building', r: [3470, 5084, 9, 8] },
+				{ type: 'building', r: [3482, 5084, 10, 8] },
+				{ type: 'building', r: [3516, 4982, 14, 7] },
+				{ type: 'building', r: [3516, 5010, 12, 7] },
+				{ type: 'building', r: [3516, 5020, 9, 9] },
+				{ type: 'building', r: [3528, 5020, 9, 9] },
+				{ type: 'building', r: [3516, 5050, 9, 8] },
+				{ type: 'building', r: [3528, 5050, 10, 8] },
+				{ type: 'building', r: [3516, 5061, 9, 6] },
+				{ type: 'building', r: [3516, 5084, 8, 8] },
+				{ id: 'dc_sandy_shores', type: 'data_center', name: 'Sandy Shores Data Center', r: [3269, 1228, 8, 5] },
+				{ id: 'emb_sandy_shores', type: 'embassy', nation: 'mars', name: 'Sandy Shores Martian Embassy', r: [3287, 1228, 6, 5] },
+				{ type: 'building', r: [3232, 1157, 14, 6] },
+				{ type: 'building', r: [3232, 1185, 8, 9] },
+				{ type: 'building', r: [3243, 1185, 10, 9] },
+				{ type: 'building', r: [3232, 1197, 12, 8] },
+				{ type: 'building', r: [3232, 1225, 14, 9] },
+				{ type: 'building', r: [3232, 1237, 10, 6] },
+				{ type: 'building', r: [3268, 1157, 10, 10] },
+				{ type: 'building', r: [3281, 1157, 14, 10] },
+				{ type: 'building', r: [3268, 1185, 10, 6] },
+				{ type: 'building', r: [3281, 1185, 8, 6] },
+				{ type: 'building', r: [3292, 1185, 9, 6] },
+				{ type: 'building', r: [3268, 1194, 9, 8] },
+				{ type: 'building', r: [3280, 1194, 8, 8] },
+				{ type: 'building', r: [3283, 1236, 14, 9] },
+				{ type: 'building', r: [3268, 1259, 12, 6] },
+				{ type: 'building', r: [3283, 1259, 10, 6] },
+				{ type: 'building', r: [3320, 1157, 8, 6] },
+				{ type: 'building', r: [3331, 1157, 8, 6] },
+				{ type: 'building', r: [3320, 1185, 10, 7] },
+				{ type: 'building', r: [3333, 1185, 14, 7] },
+				{ type: 'building', r: [3343, 1195, 9, 10] },
+				{ type: 'building', r: [3332, 1225, 8, 7] },
+				{ type: 'building', r: [3343, 1225, 9, 7] },
+				{ type: 'building', r: [3320, 1235, 10, 10] },
+				{ type: 'building', r: [3333, 1235, 10, 10] },
+				{ type: 'building', r: [3320, 1259, 14, 10] },
+				{ type: 'building', r: [3337, 1259, 8, 10] },
+				{ type: 'building', r: [3366, 1157, 12, 7] },
+				{ type: 'building', r: [3366, 1185, 10, 7] },
+				{ type: 'building', r: [3379, 1185, 9, 7] },
+				{ type: 'building', r: [3366, 1195, 12, 8] },
+				{ type: 'building', r: [3366, 1225, 12, 8] },
+				{ type: 'building', r: [3366, 1236, 8, 10] },
+				{ type: 'building', r: [3377, 1236, 9, 10] },
+				{ type: 'building', r: [3366, 1259, 8, 7] },
+				{ type: 'building', r: [3377, 1259, 10, 7] }
+			]
+		},
 	},
 	interiors: {
 		stock: {
@@ -688,7 +917,8 @@ const WH = s => s.scene == 'int' ? 2.2 : 5;
 
 /* Is a body at height z blocked at (x, y)? Walls block anything below their top;
    city water blocks anything walking (below 0.3). */
-const hit = (s, x, y, z) => z < WH(s) - .2 && RC(x, y, s.walls) || z < .3 && s.scene == 'city' && RC(x, y, s.city.water || []) || wet(s, x, y, z);
+/* buildings stand on the ground: their top is WH above the heightmap where they are, not above 0 */
+const hit = (s, x, y, z) => RC(x, y, s.walls) && z - groundZ(s, x, y) < WH(s) - .2 || z < .3 && s.scene == 'city' && RC(x, y, s.city.water || []) || wet(s, x, y, z);
 
 /* Deep water on a heightmap (city.island): the heightmap has a water level per cell, and you can
    wade where it is under 0.7 deep. A thing is blocked where it is deeper and its feet are below
@@ -696,9 +926,13 @@ const hit = (s, x, y, z) => z < WH(s) - .2 && RC(x, y, s.walls) || z < .3 && s.s
 function wet(s, x, y, z) {
   if (s.scene != 'city') return false;
   const hm = terrain(s.city);
-  if (!hm || !hm.level) return false;
-  const i = Math.min(hm.cols - 1, Math.max(0, Math.round(x / hm.res))), j = Math.min(hm.rows - 1, Math.max(0, Math.round(y / hm.res))),
+  if (!hm || !hm.level && !hm.levelAt) return false;
+  let L;
+  if (hm.levelAt) L = hm.levelAt(x, y);
+  else {
+    const i = Math.min(hm.cols - 1, Math.max(0, Math.round(x / hm.res))), j = Math.min(hm.rows - 1, Math.max(0, Math.round(y / hm.res)));
     L = hm.level[j * hm.cols + i];
+  }
   return L > -1e8 && L - heightAt(hm, x, y) > .7 && z < L + .3;
 }
 
@@ -778,6 +1012,7 @@ const HM_RES = .1, CURB_H = .15, CURB_W = .6;
 
 function buildHeightmap(city) {
   if (city.island) return generateIsland(city);
+  if (city.world) return generateWorld(city);
   const cb = city.curbs && (city.curbs === true ? {} : city.curbs), tr = city.terrain;
   if (!cb && !tr) return null;
   const [W, D] = city.size, cols = Math.ceil(W / HM_RES) + 1, rows = Math.ceil(D / HM_RES) + 1,
@@ -1112,11 +1347,427 @@ function generateIsland(city) {
   return { cols, rows, res, z: T, max, level, color, island: true, sea: SEA, stats: { acc, seep, F, T0, wt } };
 }
 
+/* ---------- World generator: a continent from a seed ----------
+   city.world = { seed, ... } makes a map too big for one grid (6000 x 6000 tiles is about a
+   Skyrim). Two layers:
+     macro   a coarse grid (12 tiles per cell) holding elevation, drainage and the water table. Elevation is
+             analytic: ocean round the north, south and east coasts, an ice sheet in the north, desert in the
+             south, forest in the west backed by a mountain range along the west edge, swamp in the east and
+             one huge mountain in the middle. Priority-flood and flow accumulation (as in generateIsland) give
+             lakes and rivers; the water table (a damped copy of the terrain) makes the swamp wet
+     fine    ground(x, y) is the macro surface plus detail noise and a carved bowl along every macro river
+             segment (the query point is domain-warped so rivers meander), swamp pools where the water table
+             reaches the surface, and flat pads under the sites
+   Detail comes in chunks of 33 x 33 vertices at three resolutions (64 tiles at 2 per cell: what you walk on;
+   256 at 8; 1024 at 32: the whole map, always loaded), generated on demand and cached. Chunk edges share
+   vertices, so they never tear. Sea level is 0. */
+function boxBlur(src, cols, rows, r) {
+  const tmp = new Float32Array(src.length), out = new Float32Array(src.length);
+  for (let j = 0; j < rows; j++) {
+    let acc = 0, n = 0;
+    for (let i = -r; i < cols + r; i++) {
+      const a = i + r, b = i - r - 1;
+      if (a < cols) { acc += src[j * cols + a]; n++; }
+      if (b >= 0) { acc -= src[j * cols + b]; n--; }
+      if (i >= 0 && i < cols) tmp[j * cols + i] = acc / n;
+    }
+  }
+  for (let i = 0; i < cols; i++) {
+    let acc = 0, n = 0;
+    for (let j = -r; j < rows + r; j++) {
+      const a = j + r, b = j - r - 1;
+      if (a < rows) { acc += tmp[a * cols + i]; n++; }
+      if (b >= 0) { acc -= tmp[b * cols + i]; n--; }
+      if (j >= 0 && j < rows) out[j * cols + i] = acc / n;
+    }
+  }
+  return out;
+}
+
+/* Priority-flood drainage: F is the surface water settles to (depressions filled to their spill), down[c] the
+   steepest-descent neighbour on it (-1 in the sea), acc[c] the flow through c given each cell's own source. */
+function drainage(T, cols, rows, SEA, src) {
+  const N = T.length, F = new Float32Array(N).fill(Infinity), seen = new Uint8Array(N), heap = new Int32Array(N + 2), EPS = 1e-3,
+    nb = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
+  let hs = 0;
+  const push = c => {
+    heap[++hs] = c;
+    for (let k = hs; k > 1 && F[heap[k]] < F[heap[k >> 1]]; k >>= 1) { const a = heap[k]; heap[k] = heap[k >> 1]; heap[k >> 1] = a; }
+  }, pop = () => {
+    const top = heap[1];
+    heap[1] = heap[hs--];
+    for (let k = 1; ;) {
+      const l = k * 2, r = l + 1;
+      let m = k;
+      if (l <= hs && F[heap[l]] < F[heap[m]]) m = l;
+      if (r <= hs && F[heap[r]] < F[heap[m]]) m = r;
+      if (m === k) break;
+      const a = heap[k]; heap[k] = heap[m]; heap[m] = a;
+      k = m;
+    }
+    return top;
+  };
+  for (let c = 0; c < N; c++) if (T[c] <= SEA) { F[c] = T[c]; seen[c] = 1; push(c); }
+  while (hs) {
+    const c = pop(), ci = c % cols, cj = (c / cols) | 0;
+    for (const [a, b] of nb) {
+      const i = ci + a, j = cj + b;
+      if (i < 0 || j < 0 || i >= cols || j >= rows) continue;
+      const n = j * cols + i;
+      if (seen[n]) continue;
+      seen[n] = 1;
+      F[n] = Math.max(T[n], F[c] + EPS);
+      push(n);
+    }
+  }
+  const down = new Int32Array(N).fill(-1), acc = Float32Array.from(src), order = new Uint32Array(N);
+  for (let j = 0; j < rows; j++)
+    for (let i = 0; i < cols; i++) {
+      const c = j * cols + i;
+      order[c] = c;
+      if (T[c] <= SEA) continue;
+      let best = 0;
+      for (const [a, b] of nb) {
+        const ni = i + a, nj = j + b;
+        if (ni < 0 || nj < 0 || ni >= cols || nj >= rows) continue;
+        const n = nj * cols + ni, s = (F[c] - F[n]) / (a && b ? 1.4142 : 1);
+        if (s > best) { best = s; down[c] = n; }
+      }
+    }
+  order.sort((a, b) => F[b] - F[a]);
+  for (let k = 0; k < N; k++) { const c = order[k]; if (down[c] >= 0) acc[down[c]] += acc[c]; }
+  return { F, down, acc };
+}
+
+const CHUNK = [64, 256, 1024], NV = 33;
+
+function generateWorld(city) {
+  const o = city.world, [W, D] = city.size, seed = o.seed ?? 1, MR = o.macro ?? 12, SEA = 0,
+    mc = Math.ceil(W / MR) + 1, mr = Math.ceil(D / MR) + 1, N = mc * mr, cx = W * .5, cy = D * .5,
+    Rm = o.mountainRadius ?? 1500, mountPeak = o.peak ?? 700, rangePeak = o.rangePeak ?? 560, thr = o.streamFlow ?? 650;
+  const bw = new Float64Array(4);   /* ice, desert, swamp, forest: north, south, east, west */
+  const biome = (x, y) => {
+    const u = x / W, v = y / D, ice = smooth((v - .72) / .12), des = smooth((.3 - v) / .1), mid = (1 - ice) * (1 - des);
+    bw[0] = ice; bw[1] = des; bw[2] = smooth((u - .66) / .1) * mid; bw[3] = smooth((.4 - u) / .1) * mid;
+  };
+  const baseElev = (x, y) => {
+    const dn = Math.min(y, D - y, W - x) + 520 * (fbm(x * .0007, y * .0007, seed + 1) - .5),   /* distance to the open coasts */
+      land = smooth((dn - 380) / 520);
+    biome(x, y);
+    let L = 16 + 16 * fbm(x * .0011, y * .0011, seed + 2) + bw[0] * 22 + bw[1] * 14 + bw[3] * 10;
+    L += (2.2 - L) * bw[2] * .93;
+    const rg = smooth((1100 - x) / 1100) ** 1.15 * (.4 + .6 * ridged(x * .0016, y * .0016, seed + 3)) * rangePeak,
+      m = Math.max(0, 1 - Math.hypot(x - cx, y - cy) / Rm),
+      mount = mountPeak * (.55 * m * m * (3 - 2 * m) + .45 * m ** 1.6) * (.5 + .5 * ridged(x * .002, y * .002, seed + 4));
+    return -45 + (L + rg + mount + 45) * land;
+  };
+
+  /* macro grid */
+  const E = new Float32Array(N), rain = new Float32Array(N);
+  for (let j = 0; j < mr; j++)
+    for (let i = 0; i < mc; i++) {
+      const x = i * MR, y = j * MR, c = j * mc + i, e = baseElev(x, y);
+      E[c] = e;
+      rain[c] = ((.35 + 1.1 * bw[3] + 1.4 * bw[2] + .5 * bw[0]) * (1 - .85 * bw[1]) + 1.2 * smooth(e / 500)) * (e > SEA ? 1 : 0);
+    }
+  const { F, down, acc } = drainage(E, mc, mr, SEA, rain);
+
+  /* the water table: the terrain's blurred copy capped at the surface; where they meet the ground is wet */
+  const wt = boxBlur(Float32Array.from(E, v => Math.max(v, SEA)), mc, mr, 6), wet = new Float32Array(N);
+  for (let c = 0; c < N; c++) wet[c] = E[c] > SEA ? 1 - smooth((E[c] - Math.min(E[c], wt[c])) / 2.5) : 0;
+
+  /* lakes: connected filled depressions at least 2 deep and 8 cells big */
+  const lakeL = new Float32Array(N).fill(-1e9), lab = new Uint8Array(N), nb = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  for (let c = 0; c < N; c++) {
+    if (lab[c] || !(F[c] - E[c] > 2 && E[c] > SEA + 1)) continue;
+    const stack = [c], cells = [];
+    lab[c] = 1;
+    while (stack.length) {
+      const q = stack.pop();
+      cells.push(q);
+      for (const [a, b] of nb) {
+        const i = (q % mc) + a, j = ((q / mc) | 0) + b;
+        if (i < 0 || j < 0 || i >= mc || j >= mr) continue;
+        const n = j * mc + i;
+        if (!lab[n] && F[n] - E[n] > 2 && E[n] > SEA + 1) { lab[n] = 1; stack.push(n); }
+      }
+    }
+    if (cells.length >= 8) for (const q of cells) lakeL[q] = F[q];
+  }
+  const rivR = new Float32Array(N);   /* river strength: flow over the stream threshold, 0 where there is no river */
+  let rivers = 0;
+  for (let c = 0; c < N; c++) if (E[c] > SEA && lakeL[c] < -1e8 && acc[c] >= thr && down[c] >= 0) { rivR[c] = acc[c] / thr; rivers++; }
+
+  /* ---- fine ground ---- */
+  const bil = (A, x, y) => {
+    const fx = Math.min(Math.max(x / MR, 0), mc - 1.0001), fy = Math.min(Math.max(y / MR, 0), mr - 1.0001),
+      i = fx | 0, j = fy | 0, u = fx - i, v = fy - j, k = j * mc + i;
+    return (A[k] * (1 - u) + A[k + 1] * u) * (1 - v) + (A[k + mc] * (1 - u) + A[k + mc + 1] * u) * v;
+  };
+  /* flat pads: one per city.pads rect (a whole city), else one per site */
+  const G = { level: -1e9 }, sites = (city.pads || city.sites.map(q => q.r)).map(r => ({ r, pad: 0 })), roads = city.roads || [];
+  let net = null;   /* highways and railroads, built once ground() exists (see below) */
+  const R = { kind: -1, d: 1e9, h: 0, s: 0 };
+  const ground = (x, y, noPad, noRoad) => {
+    let h = bil(E, x, y);
+    G.level = -1e9;
+    G.rd = 1e9; G.rk = -1; G.rs = 0;
+    biome(x, y);
+    const des = bw[1], swa = bw[2], mtn = smooth((h - 60) / 400), amp = (1.8 + 11 * mtn) * (1 - .75 * swa);
+    h += (fbm(x * .021, y * .021, seed + 11, 4) - .5) * 2 * amp + (ridged(x * .006, y * .006, seed + 12, 3) - .6) * 14 * mtn +
+      des * 5 * (ridged(x * .01, y * .014, seed + 13, 2) - .6) + (fbm(x * .17, y * .17, seed + 14, 2) - .5) * (1 - mtn * .5);
+    /* lakes: the filled level of the nearest macro cells, wherever the ground is below it */
+    const i0 = Math.min(mc - 2, Math.max(0, Math.floor(x / MR))), j0 = Math.min(mr - 2, Math.max(0, Math.floor(y / MR))), k0 = j0 * mc + i0,
+      ll = Math.max(lakeL[k0], lakeL[k0 + 1], lakeL[k0 + mc], lakeL[k0 + mc + 1]);
+    if (ll > -1e8 && h < ll) G.level = ll;
+    if (h < SEA) G.level = Math.max(G.level, SEA);
+    /* swamp pools: where the water table is at the surface the ground is a mosaic of shallow ponds */
+    if (swa > .05 && h > SEA + .3) {
+      const th = .08 + .2 * swa + .12 * bil(wet, x, y), pn = fbm(x * .03, y * .03, seed + 8, 3);
+      if (pn < th) {
+        const lv = h - .1;
+        h -= 1.3 * smooth((th - pn) / .12);
+        if (lv - h > .03) G.level = Math.max(G.level, lv);
+      }
+    }
+    /* rivers: bowls along the macro flow segments, meandering because the query is warped */
+    if (h > SEA - 1) {
+      const wx = x + 22 * (fbm(x * .011, y * .011, seed + 21, 2) - .5) * 2, wy = y + 22 * (fbm(x * .011, y * .011, seed + 22, 2) - .5) * 2,
+        ci = Math.floor(x / MR), cj = Math.floor(y / MR);
+      let best = h, lvl = -1e9;
+      for (let j = cj - 1; j <= cj + 2; j++)
+        for (let i = ci - 1; i <= ci + 2; i++) {
+          if (i < 0 || j < 0 || i >= mc || j >= mr) continue;
+          const c = j * mc + i, r = rivR[c];
+          if (r === 0) continue;
+          const d = down[c], ax = i * MR, ay = j * MR, vx = (d % mc) * MR - ax, vy = ((d / mc) | 0) * MR - ay,
+            t = Math.min(1, Math.max(0, ((wx - ax) * vx + (wy - ay) * vy) / (vx * vx + vy * vy))),
+            rr = rivR[d] > 0 ? r + (rivR[d] - r) * t : r, w = 1.2 + .7 * Math.sqrt(rr), rad = w * 1.8,
+            dist = Math.hypot(wx - ax - vx * t, wy - ay - vy * t);
+          if (dist >= rad) continue;
+          const wd = .3 * Math.sqrt(rr), k = 1 - (dist / rad) ** 2, bed = h - 1.33 * wd * k;
+          if (bed < best) { best = bed; lvl = bed + wd * k; }
+        }
+      if (lvl > -1e8) { h = best; if (lvl > G.level) G.level = lvl; }
+    }
+    /* highways and railroads: the ground follows the route's own smoothed profile inside its core and blends back
+       to the land beside it; water under the road is cleared (a causeway where it crosses a river) */
+    if (net && !noRoad) {
+      roadQuery(x, y);
+      if (R.kind >= 0) {
+        const hw = ROAD_HW[R.kind], bwid = ROAD_BW[R.kind];
+        if (R.d < hw + bwid) {
+          const k = R.d <= hw ? 1 : smooth(1 - (R.d - hw) / bwid);
+          h += (R.h - h) * k;
+          if (k > .45) G.level = -1e9;
+        }
+        G.rd = R.d; G.rk = R.kind; G.rs = R.s;
+      }
+    }
+    if (!noPad)
+      for (const q of sites) {
+        const [rx, ry, rw, rd] = q.r, e = Math.hypot(Math.max(rx - 3 - x, 0, x - (rx + rw + 3)), Math.max(ry - 3 - y, 0, y - (ry + rd + 3)));
+        if (e >= 14) continue;
+        if (!q.pad) {   /* the pad is the average ground under its rect */
+          let sum = 0, n = 0;
+          for (let b = 0; b <= 6; b++) for (let a = 0; a <= 8; a++) { sum += ground(rx + rw * a / 8, ry + rd * b / 6, true, true); n++; }
+          q.pad = Math.max(SEA + 1.5, sum / n);
+        }
+        const k = smooth(1 - e / 14);
+        h += (q.pad - h) * k;
+        if (k > .3) G.level = -1e9;
+      }
+    return h;
+  };
+
+
+  /* ---- highways and railroads ----
+     city.routes = [{ kind: 'highway' | 'rail', from: 'City', to: 'City' }]. Each is an A* path over the macro grid
+     that keeps off the sea, lakes, steep ground and mountains and pays extra to cross a river (rails also pay to
+     run beside a highway), from one city's pad edge to another's. The path is smoothed, its height profile is the
+     terrain's height averaged over +-80 tiles (so grades stay gentle) pinned to the two pad heights at the ends, and
+     it goes into a grid of segments that ground() asks about. */
+  const ROAD_HW = [6, 3.5], ROAD_BW = [10, 6];
+  const roadQuery = (x, y) => {
+    R.kind = -1; R.d = 1e9;
+    if (!net) return;
+    const list = net.grid.get(Math.floor(y / 64) * 1024 + Math.floor(x / 64));
+    if (!list) return;
+    let bestM = 1e9;
+    for (const i of list) {
+      const o = i * 9, ax = net.seg[o], ay = net.seg[o + 1], vx = net.seg[o + 2] - ax, vy = net.seg[o + 3] - ay,
+        t = Math.min(1, Math.max(0, ((x - ax) * vx + (y - ay) * vy) / (vx * vx + vy * vy))), d = Math.hypot(x - ax - vx * t, y - ay - vy * t), kind = net.seg[o + 6], m = d - ROAD_HW[kind];
+      if (m < bestM) { bestM = m; R.kind = kind; R.d = d; R.h = net.seg[o + 4] + (net.seg[o + 5] - net.seg[o + 4]) * t; R.s = net.seg[o + 7] + net.seg[o + 8] * t; }
+    }
+  };
+  const buildNet = () => {
+    const routes = city.routes || [];
+    if (!routes.length) return null;
+    const places = Object.fromEntries((city.places || []).map(q => [q.name, q.at])), padOf = at => (city.pads || []).find(([px, py, pw, pd]) => at[0] >= px && at[0] <= px + pw && at[1] >= py && at[1] <= py + pd),
+      padHeight = r => {
+        const q = sites.find(s => s.r === r);
+        if (!q.pad) ground(r[0] + 1, r[1] + 1, false);   /* computes and caches it */
+        return q.pad;
+      };
+    const slope = new Float32Array(N), hwNear = new Uint8Array(N), kinds = { highway: 0, rail: 1 };
+    for (let j = 1; j < mr - 1; j++) for (let i = 1; i < mc - 1; i++) { const c = j * mc + i; slope[c] = Math.hypot(E[c + 1] - E[c - 1], E[c + mc] - E[c - mc]) / (2 * MR); }
+    const exit = (name, other, kind) => {   /* where a route leaves a city's pad: the end of an avenue (highway) or side street (rail) */
+      const a = places[name], b = places[other], [px, py, pw, pd] = padOf(a), dx = b[0] - a[0], dy = b[1] - a[1], ew = Math.abs(dx) * pd > Math.abs(dy) * pw, hi = kind === 'highway';
+      return ew ? [dx > 0 ? px + pw : px, py + (hi ? 66 : 28)] : [px + (hi ? 86 : 36), dy > 0 ? py + pd : py];
+    };
+    const astar = (s, g, rail) => {
+      const idx = p => Math.min(mr - 1, Math.max(0, Math.round(p[1] / MR))) * mc + Math.min(mc - 1, Math.max(0, Math.round(p[0] / MR))), s0 = idx(s), g0 = idx(g),
+        gs = new Float32Array(N).fill(Infinity), par = new Int32Array(N).fill(-1), closed = new Uint8Array(N), fs = new Float32Array(N), heap = new Int32Array(N + 2),
+        gx = g0 % mc, gy = (g0 / mc) | 0;
+      let hs = 0;
+      const push = c => { heap[++hs] = c; for (let k = hs; k > 1 && fs[heap[k]] < fs[heap[k >> 1]]; k >>= 1) { const a = heap[k]; heap[k] = heap[k >> 1]; heap[k >> 1] = a; } },
+        pop = () => { const top = heap[1]; heap[1] = heap[hs--]; for (let k = 1; ;) { const l = k * 2, r = l + 1; let m = k; if (l <= hs && fs[heap[l]] < fs[heap[m]]) m = l; if (r <= hs && fs[heap[r]] < fs[heap[m]]) m = r; if (m === k) break; const a = heap[k]; heap[k] = heap[m]; heap[m] = a; k = m; } return top; };
+      gs[s0] = 0; fs[s0] = 0; push(s0);
+      while (hs) {
+        const c = pop();
+        if (closed[c]) continue;
+        closed[c] = 1;
+        if (c === g0) break;
+        const ci = c % mc, cj = (c / mc) | 0;
+        for (let b = -1; b <= 1; b++) for (let a = -1; a <= 1; a++) {
+          if (!a && !b) continue;
+          const i = ci + a, j = cj + b;
+          if (i < 1 || j < 1 || i >= mc - 1 || j >= mr - 1) continue;
+          const n = j * mc + i;
+          if (closed[n]) continue;
+          const nearEnd = Math.hypot(i - gx, j - gy) < 20 || Math.hypot(i - (s0 % mc), j - ((s0 / mc) | 0)) < 20;
+          if (!nearEnd && (E[n] <= 1.2 || lakeL[n] > -1e8 || E[n] > 220)) continue;   /* the swamp is only ~2 above the sea */
+          const sl = slope[n] * 9, pen = sl * sl + (rivR[n] > 0 ? 25 : 0) + (rail && hwNear[n] && !nearEnd ? 4 : 0), step = (a && b ? 1.4142 : 1) * (1 + pen), ng = gs[c] + step;
+          if (ng < gs[n]) { gs[n] = ng; par[n] = c; fs[n] = ng + Math.hypot(i - gx, j - gy); push(n); }
+        }
+      }
+      if (par[g0] < 0 && g0 !== s0) return null;
+      const path = [];
+      for (let c = g0; c >= 0; c = par[c]) path.push([(c % mc) * MR, ((c / mc) | 0) * MR]);
+      return path.reverse();
+    };
+    const smoothPath = (path, s, g) => {
+      let q = [s, ...path.slice(1, -1), g];
+      for (let it = 0; it < 3; it++) q = q.map((p, i) => i === 0 || i === q.length - 1 ? p : [(q[i - 1][0] + p[0] * 2 + q[i + 1][0]) / 4, (q[i - 1][1] + p[1] * 2 + q[i + 1][1]) / 4]);
+      for (let it = 0; it < 2; it++) {   /* Chaikin corner cutting */
+        const o = [q[0]];
+        for (let i = 0; i < q.length - 1; i++) o.push([q[i][0] * .75 + q[i + 1][0] * .25, q[i][1] * .75 + q[i + 1][1] * .25], [q[i][0] * .25 + q[i + 1][0] * .75, q[i][1] * .25 + q[i + 1][1] * .75]);
+        o.push(q[q.length - 1]);
+        q = o;
+      }
+      const out = [q[0]];   /* resample every ~10 tiles */
+      let acc = 0;
+      for (let i = 1; i < q.length; i++) {
+        acc += Math.hypot(q[i][0] - q[i - 1][0], q[i][1] - q[i - 1][1]);
+        if (acc >= 10 || i === q.length - 1) { out.push(q[i]); acc = 0; }
+      }
+      return out;
+    };
+    const segs = [], rails = [], polylines = [];
+    for (const kindName of ['highway', 'rail'])
+      for (const rt of routes.filter(r => r.kind === kindName)) {
+        const s = exit(rt.from, rt.to, kindName), g = exit(rt.to, rt.from, kindName), raw = astar(s, g, kindName === 'rail');
+        if (!raw) continue;
+        const pts = smoothPath(raw, s, g), n = pts.length, h0 = pts.map(p => ground(p[0], p[1], true, true)), hs = h0.map((_, i) => { let sum = 0, c = 0; for (let k = Math.max(0, i - 8); k <= Math.min(n - 1, i + 8); k++) { sum += h0[k]; c++; } return sum / c; }),
+          pa = padHeight(padOf(places[rt.from])), pb = padHeight(padOf(places[rt.to]));
+        const prof = hs.map((v, i) => { const w0 = smooth(1 - i / 12), w1 = smooth(1 - (n - 1 - i) / 12); return Math.max(SEA + 1.5, v + (pa - v) * w0 + (pb - v) * w1); });
+        polylines.push({ kind: kinds[kindName], pts, prof, from: rt.from, to: rt.to });
+        if (kindName === 'highway') for (const p of pts) for (let j = Math.max(0, Math.round(p[1] / MR) - 3); j <= Math.min(mr - 1, Math.round(p[1] / MR) + 3); j++) for (let i = Math.max(0, Math.round(p[0] / MR) - 3); i <= Math.min(mc - 1, Math.round(p[0] / MR) + 3); i++) hwNear[j * mc + i] = 1;
+        else rails.push(pts);
+      }
+    const seg = new Float64Array(polylines.reduce((a, pl) => a + pl.pts.length - 1, 0) * 9), grid = new Map();
+    let si = 0, total = 0;
+    for (const pl of polylines) {
+      let s = 0;
+      for (let i = 0; i < pl.pts.length - 1; i++) {
+        const [ax, ay] = pl.pts[i], [bx, by] = pl.pts[i + 1], len = Math.hypot(bx - ax, by - ay), o = si * 9;
+        seg.set([ax, ay, bx, by, pl.prof[i], pl.prof[i + 1], pl.kind, s, len], o);
+        s += len;
+        const pad = ROAD_HW[pl.kind] + ROAD_BW[pl.kind] + 2;
+        for (let cj = Math.floor((Math.min(ay, by) - pad) / 64); cj <= Math.floor((Math.max(ay, by) + pad) / 64); cj++)
+          for (let ci = Math.floor((Math.min(ax, bx) - pad) / 64); ci <= Math.floor((Math.max(ax, bx) + pad) / 64); ci++) {
+            const key = cj * 1024 + ci;
+            if (!grid.has(key)) grid.set(key, []);
+            grid.get(key).push(si);
+          }
+        si++;
+      }
+      total += s;
+    }
+    return { seg, grid, rails, polylines, length: total };
+  };
+  net = buildNet();
+
+  /* ---- colours ---- */
+  const hex = s => [1, 3, 5].map(a => parseInt(s.slice(a, a + 2), 16) / 255),
+    P = { grass: hex('#6f9a52'), forest: hex('#3f6f3c'), swamp: hex('#556b44'), sand: hex('#d9bf86'), snow: hex('#eef4f8'), ice: hex('#bcd8e8'), rock: hex('#8a8984'),
+      mud: hex('#6a6a48'), road: hex('#5d6067'), asphalt: hex('#4b4e54'), line: hex('#e3c64a'), shoulder: hex('#8b8a84'), ballast: hex('#857c6b'), deep: hex('#2e5f80'), bed: hex('#7d8a74'), water: hex('#4f93bd') },
+    mix = (a, b, k) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k], sm = (a, b, v) => smooth((v - a) / (b - a));
+  const paint = (x, y, h, sl, lv, lod, out, k, rd, rk, rs) => {
+    biome(x, y);
+    const ice = bw[0], des = bw[1], swa = bw[2], fo = bw[3], g = fbm(x * .05, y * .05, seed + 5, 2), snowline = 420 - 400 * ice;
+    let col = mix(P.grass, P.forest, fo * (.5 + .5 * g));
+    col = mix(col, P.swamp, swa);
+    col = mix(col, P.sand, des);
+    col = mix(col, ice > .5 && g > .55 ? P.ice : P.snow, ice * (.8 + .2 * g));
+    col = mix(col, P.rock, Math.max(sm(.75, 1.1, sl), sm(220, 420, h)) * (1 - ice * .5));
+    col = mix(col, P.snow, sm(snowline - 30, snowline + 30, h + 20 * (g - .5)) * (1 - sm(1.2, 1.7, sl)));
+    col = mix(col, mix(P.sand, mix(P.snow, P.mud, swa), Math.max(ice, swa)), sm(2.2, .6, h));
+    if (h >= SEA && !(lv > -1e8 && lv - h > .03)) for (const [rx, ry, rw, rd] of roads) if (x >= rx && x <= rx + rw && y >= ry && y <= ry + rd) { col = P.road; break; }
+    if (rk >= 0 && h >= SEA && !(lv > -1e8 && lv - h > .03)) {   /* highway: asphalt, shoulders, a dashed centre line; rail: ballast */
+      if (rk === 0) { if (rd < 5.6) col = rd < 1.3 && rs % 16 < 8 ? P.line : P.asphalt; else if (rd < 7.4) col = P.shoulder; }
+      else if (rd < 3.4) col = P.ballast;
+    }
+    if (h < SEA) col = mix(P.sand, P.deep, sm(0, 40, SEA - h));
+    else if (lv > -1e8 && lv - h > .03) col = lod ? mix(col, P.water, .85) : mix(col, P.bed, .8);
+    out[k] = col[0]; out[k + 1] = col[1]; out[k + 2] = col[2];
+  };
+
+  /* ---- chunks ---- */
+  const chunks = [new Map(), new Map(), new Map()], tmp = [0, 0, 0];
+  const chunkGen = (lod, qx, qy) => {
+    const size = CHUNK[lod], res = size / (NV - 1), z = new Float32Array(NV * NV), level = new Float32Array(NV * NV), color = new Float32Array(NV * NV * 3),
+      rd = new Float32Array(NV * NV), rk = new Int8Array(NV * NV), rs = new Float32Array(NV * NV);
+    for (let j = 0; j < NV; j++)
+      for (let i = 0; i < NV; i++) { const k = j * NV + i; z[k] = ground(qx * size + i * res, qy * size + j * res); level[k] = G.level; rd[k] = G.rd; rk[k] = G.rk; rs[k] = G.rs; }
+    for (let j = 0; j < NV; j++)
+      for (let i = 0; i < NV; i++) {
+        const k = j * NV + i, gx = (z[j * NV + Math.min(i + 1, NV - 1)] - z[j * NV + Math.max(i - 1, 0)]) / (2 * res),
+          gy = (z[Math.min(j + 1, NV - 1) * NV + i] - z[Math.max(j - 1, 0) * NV + i]) / (2 * res);
+        paint(qx * size + i * res, qy * size + j * res, z[k], Math.hypot(gx, gy), level[k], lod, color, k * 3, rd[k], rk[k], rs[k]);
+      }
+    return { z, level, color, size, res, qx, qy };
+  };
+  const getChunk = (lod, qx, qy) => {
+    const m = chunks[lod], key = qx * 65536 + qy;
+    let c = m.get(key);
+    if (!c) {
+      c = chunkGen(lod, qx, qy);
+      m.set(key, c);
+      if (lod === 0 && m.size > 1500) { let n = 0; for (const k of m.keys()) { m.delete(k); if (++n > 300) break; } }
+    }
+    return c;
+  };
+  const at = (x, y) => {
+    x = Math.min(Math.max(x, 0), W); y = Math.min(Math.max(y, 0), D);
+    const qx = Math.floor(x / 64), qy = Math.floor(y / 64), c = getChunk(0, qx, qy), fx = (x - qx * 64) / 2, fy = (y - qy * 64) / 2,
+      i = Math.min(NV - 2, fx | 0), j = Math.min(NV - 2, fy | 0), u = fx - i, v = fy - j, z = c.z, k = j * NV + i;
+    return (z[k] * (1 - u) + z[k + 1] * u) * (1 - v) + (z[k + NV] * (1 - u) + z[k + NV + 1] * u) * v;
+  };
+  const levelAt = (x, y) => {
+    x = Math.min(Math.max(x, 0), W); y = Math.min(Math.max(y, 0), D);
+    const qx = Math.floor(x / 64), qy = Math.floor(y / 64), c = getChunk(0, qx, qy);
+    return c.level[Math.min(NV - 1, Math.round((y - qy * 64) / 2)) * NV + Math.min(NV - 1, Math.round((x - qx * 64) / 2))];
+  };
+  return { world: true, island: true, sea: SEA, at, levelAt, getChunk, W, D, max: mountPeak, rails: net ? net.rails : [], net, biomeAt: (x, y) => (biome(x, y), Array.from(bw)),
+    stats: { E, F, down, acc, rivR, lakeL, wet, mc, mr, MR, rivers, ground, G } };
+}
+
 /* The city's grid, or null if its ground is flat. */
 const terrain = (city, rebuild) => {
   if (rebuild || city._hm === undefined) {
     /* an island takes ~0.5 s to generate, so a restart reuses it while its config and sites are unchanged */
-    const key = city.island ? JSON.stringify([city.island, city.size, city.sites.map(q => q.r)]) : null;
+    const key = city.island || city.world ? JSON.stringify([city.island, city.world, city.size, city.sites.map(q => q.r), city.pads, city.roads, city.routes]) : null;
     if (!(key && city._hm && city._hmKey === key)) {
       city._hm = buildHeightmap(city);
       city._hmKey = key;
@@ -1126,6 +1777,7 @@ const terrain = (city, rebuild) => {
 };
 
 const heightAt = (hm, x, y) => {
+  if (hm.at) return hm.at(x, y);
   const fx = Math.min(Math.max(x / hm.res, 0), hm.cols - 1), fy = Math.min(Math.max(y / hm.res, 0), hm.rows - 1),
     i = Math.min(Math.floor(fx), hm.cols - 2), j = Math.min(Math.floor(fy), hm.rows - 2),
     u = fx - i, v = fy - j, z = hm.z, c = hm.cols, k = j * c + i;
@@ -1140,7 +1792,7 @@ const groundZ = (s, x, y) => {
   return hm ? heightAt(hm, x, y) : 0;
 };
 
-(window.GSA = window.GSA || {}).physics = { RC, WH, hit, mv, steerTowards, shove, terrain, groundZ, mountainHeight, valleyWall, wallCrest, fbm, wet, steep, inTerrain };</script></script>
+(window.GSA = window.GSA || {}).physics = { RC, WH, hit, mv, steerTowards, shove, terrain, groundZ, mountainHeight, valleyWall, wallCrest, fbm, wet, steep, inTerrain, CHUNK, NV, hash2 };</script></script>
 		<script pathHint="engine/ai.js">// /engine/ai.js
 /* awhat a mob knows and what happens to it: factions, senses, spawning,
    drops, damage. What it does about any of that is its MobScript (scripting.js).
@@ -1762,6 +2414,25 @@ const init = canvas => {
 const tok = () => Object.fromEntries(['bg', 'ground', 'bld', 'fg', 'acc', 'cop', 'bad'].map(n => [n, getComputedStyle(document.documentElement).getPropertyValue('--' + n).trim()]));
 
 /* A mesh at a position in the parent's own (three.js) space. Model builders use this. */
+/* Parts [geometry, colour, x, y, z] as one geometry with vertex colours. */
+const mergeParts = parts => {
+  const pos = [], nor = [], col = [], ind = [], c = new THREE.Color();
+  for (const [g, color, ox, oy, oz] of parts) {
+    const p = g.attributes.position, n = g.attributes.normal, base = pos.length / 3;
+    c.set(color);
+    for (let i = 0; i < p.count; i++) { pos.push(p.getX(i) + ox, p.getY(i) + oy, p.getZ(i) + oz); nor.push(n.getX(i), n.getY(i), n.getZ(i)); col.push(c.r, c.g, c.b); }
+    if (g.index) for (const k of g.index.array) ind.push(base + k);
+    else for (let i = 0; i < p.count; i++) ind.push(base + i);
+  }
+  const m = new THREE.BufferGeometry();
+  m.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  m.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  m.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  m.setIndex(ind);
+  return m;
+};
+const vehicleMat = new THREE.MeshLambertMaterial({ vertexColors: true });
+
 const addMesh = (parent, geo, color, x, y, z) => {
   const m = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color }));
   m.position.set(x, y, z);
@@ -1927,9 +2598,223 @@ const wallMesh = (city, C) => {
 };
 const smoothstep = (a, b, x) => { const k = Math.min(Math.max((x - a) / (b - a), 0), 1); return k * k * (3 - 2 * k); };
 
+/* The world as chunks at three levels of detail (see generateWorld): 64-tile chunks round the player (what you
+   walk on), 256-tile chunks further out, and 1024-tile chunks for the whole continent, always there. A finer chunk
+   is drawn over the coarser one under it (the coarser sits 1 and 4 tiles lower, which hides the seams). A few chunks
+   are made per frame, nearest first, and far ones dropped. Near chunks also get water (lakes, rivers, swamp pools)
+   and instanced trees, cacti and swamp trees; the sea is one big plane. */
+const worldView = (city, C, grp, pl) => {
+  const hm = GSA.physics.terrain(city), { CHUNK, NV, hash2 } = GSA.physics, [W, D] = city.size, seed = city.world.seed ?? 1,
+    OFF = [0, -1, -4], RAD = [5, 4, 99], NX = CHUNK.map(s => Math.ceil(W / s)), NY = CHUNK.map(s => Math.ceil(D / s)),
+    wg = new THREE.Group(), maps = [new Map(), new Map(), new Map()], dummy = new THREE.Object3D(),
+    tMat = new THREE.MeshLambertMaterial({ vertexColors: true }), dMat = new THREE.MeshLambertMaterial({ vertexColors: true }),
+    wMat = new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: .8, depthWrite: false }),
+    idx = (() => {
+      const a = [];
+      for (let j = 0; j < NV - 1; j++) for (let i = 0; i < NV - 1; i++) { const k = j * NV + i; a.push(k, k + 1, k + NV, k + 1, k + NV + 1, k + NV); }
+      return new THREE.BufferAttribute(new Uint16Array(a), 1);
+    })();
+  grp.add(wg);
+
+  const sea = new THREE.Mesh(new THREE.PlaneGeometry(W + 24000, D + 24000), new THREE.MeshLambertMaterial({ color: '#2a6a9a', transparent: true, opacity: .9, depthWrite: false }));
+  sea.rotation.x = -Math.PI / 2;
+  sea.position.set(W / 2, 0, -D / 2);
+  wg.add(sea);
+
+  const merge = parts => {
+    const pos = [], nor = [], col = [], ind = [];
+    for (const [g, color, ox, oy, oz] of parts) {
+      const c = new THREE.Color(color), p = g.attributes.position, n = g.attributes.normal, base = pos.length / 3;
+      for (let i = 0; i < p.count; i++) { pos.push(p.getX(i) + ox, p.getY(i) + oy, p.getZ(i) + oz); nor.push(n.getX(i), n.getY(i), n.getZ(i)); col.push(c.r, c.g, c.b); }
+      for (const k of g.index.array) ind.push(base + k);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    g.setIndex(ind);
+    return g;
+  };
+  const kinds = [
+    merge([[new THREE.CylinderGeometry(.18, .24, 1.4, 5), '#5a4030', 0, .7, 0], [new THREE.ConeGeometry(1.1, 3.8, 7), '#2f5f35', 0, 3.2, 0]]),
+    merge([[new THREE.CylinderGeometry(.35, .4, 3, 6), '#4f8a3f', 0, 1.5, 0], [new THREE.CylinderGeometry(.2, .2, 1.2, 5), '#4f8a3f', .6, 2, 0], [new THREE.CylinderGeometry(.2, .2, 1, 5), '#4f8a3f', -.55, 1.5, 0]]),
+    merge([[new THREE.CylinderGeometry(.22, .3, 2.2, 5), '#4a3a2a', 0, 1.1, 0], [new THREE.SphereGeometry(1.6, 6, 4), '#46603a', 0, 3.1, 0]])
+  ];
+
+  const mkTerrain = (c, lod) => {
+    const pos = new Float32Array(NV * NV * 3);
+    for (let j = 0; j < NV; j++)
+      for (let i = 0; i < NV; i++) {
+        const k = j * NV + i;
+        pos[k * 3] = c.qx * c.size + i * c.res;
+        pos[k * 3 + 1] = c.z[k] + OFF[lod];
+        pos[k * 3 + 2] = -(c.qy * c.size + j * c.res);
+      }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.setAttribute('color', new THREE.BufferAttribute(c.color, 3));
+    g.setIndex(idx);
+    g.computeVertexNormals();
+    return new THREE.Mesh(g, tMat);
+  };
+  const shallow = new THREE.Color('#8fd0e0'), deep = new THREE.Color('#1d5f93'), tc = new THREE.Color();
+  const mkWater = c => {   /* lakes, rivers and pools; the sea (level 0) is the plane */
+    const pos = new Float32Array(NV * NV * 3), col = new Float32Array(NV * NV * 3);
+    let any = false;
+    for (let j = 0; j < NV; j++)
+      for (let i = 0; i < NV; i++) {
+        const k = j * NV + i, L = c.level[k], d = L - c.z[k], on = L > .02 && d > .03;
+        if (on) any = true;
+        pos[k * 3] = c.qx * c.size + i * c.res;
+        pos[k * 3 + 1] = on ? L : c.z[k] - .4;
+        pos[k * 3 + 2] = -(c.qy * c.size + j * c.res);
+        tc.copy(shallow).lerp(deep, smoothstep(0, 5, d)).toArray(col, k * 3);
+      }
+    if (!any) return null;
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    g.setIndex(idx);
+    g.computeVertexNormals();
+    return new THREE.Mesh(g, wMat);
+  };
+  const decorFor = c => {
+    const lists = [[], [], []], cell = 8, n = 64 / cell, out = [];
+    for (let j = 0; j < n; j++)
+      for (let i = 0; i < n; i++) {
+        const a = i + c.qx * n, b = j + c.qy * n, x = c.qx * 64 + (i + hash2(a, b, seed + 31)) * cell, y = c.qy * 64 + (j + hash2(a, b, seed + 32)) * cell,
+          h = hm.at(x, y), lv = hm.levelAt(x, y);
+        if (h < 2.5 || lv > -1e8 && lv - h > -.2) continue;
+        if (Math.hypot(hm.at(x + 1.5, y) - hm.at(x - 1.5, y), hm.at(x, y + 1.5) - hm.at(x, y - 1.5)) / 3 > .8) continue;
+        const [ice, des, swa, fo] = hm.biomeAt(x, y), pPine = (.7 * fo + .08 * ice) * (1 - smoothstep(180, 260, h)), pCac = .05 * des, pSw = .22 * swa, r = hash2(a, b, seed + 33),
+          kind = r < pPine ? 0 : r < pPine + pCac ? 1 : r < pPine + pCac + pSw ? 2 : -1;
+        if (kind >= 0) lists[kind].push([x, h, y, 1 + hash2(a, b, seed + 34) * .8, hash2(a, b, seed + 35) * 6.28]);
+      }
+    lists.forEach((l, k) => {
+      if (!l.length) return;
+      const m = new THREE.InstancedMesh(kinds[k], dMat, l.length);
+      l.forEach(([x, h, y, s, ry], q) => { dummy.position.set(x, h, -y); dummy.rotation.y = ry; dummy.scale.setScalar(s * (k == 0 ? 1.3 : 1)); dummy.updateMatrix(); m.setMatrixAt(q, dummy.matrix); });
+      m.instanceMatrix.needsUpdate = true;
+      m.frustumCulled = false;
+      out.push(m);
+    });
+    return out;
+  };
+
+  /* Railroad track on the near chunks: a sleeper every ~2.4 tiles and two rails, as instanced boxes laid along the
+     route, each tilted to the ground under it. The roadbed itself (ballast, grading) is in the terrain. */
+  const sleeperMat = new THREE.MeshLambertMaterial({ color: '#5b4636' }), railMat = new THREE.MeshLambertMaterial({ color: '#9aa0a6' }),
+    sleeperGeo = new THREE.BoxGeometry(3.4, .18, .5), railGeo = new THREE.BoxGeometry(.16, .16, 1);
+  const railsFor = c => {
+    const x0 = c.qx * 64, y0 = c.qy * 64, pts = [];
+    for (const pl of hm.rails)
+      for (let i = 0; i < pl.length - 1; i++) {
+        const [ax, ay] = pl[i], [bx, by] = pl[i + 1];
+        if (Math.max(ax, bx) < x0 - 4 || Math.min(ax, bx) > x0 + 68 || Math.max(ay, by) < y0 - 4 || Math.min(ay, by) > y0 + 68) continue;
+        const len = Math.hypot(bx - ax, by - ay), n = Math.max(1, Math.round(len / 2.4)), dx = (bx - ax) / len, dy = (by - ay) / len;
+        for (let k = 0; k < n; k++) {
+          const u = (k + .5) / n, x = ax + (bx - ax) * u, y = ay + (by - ay) * u;
+          if (x >= x0 && x < x0 + 64 && y >= y0 && y < y0 + 64) pts.push([x, y, dx, dy, len / n]);
+        }
+      }
+    if (!pts.length) return [];
+    const sl = new THREE.InstancedMesh(sleeperGeo, sleeperMat, pts.length), rl = new THREE.InstancedMesh(railGeo, railMat, pts.length * 2);
+    pts.forEach(([x, y, dx, dy, step], q) => {
+      const h = hm.at(x, y), pitch = Math.atan2(hm.at(x + dx * 1.2, y + dy * 1.2) - hm.at(x - dx * 1.2, y - dy * 1.2), 2.4);
+      dummy.rotation.order = 'YXZ';
+      dummy.rotation.set(-pitch, Math.atan2(dx, -dy), 0);
+      dummy.scale.set(1, 1, 1);
+      dummy.position.set(x, h + .12, -y);
+      dummy.updateMatrix();
+      sl.setMatrixAt(q, dummy.matrix);
+      for (const side of [-1, 1]) {
+        dummy.position.set(x + (-dy) * .75 * side * -1, h + .28, -(y + dx * .75 * side * -1));
+        dummy.scale.set(1, 1, step * 1.04);
+        dummy.updateMatrix();
+        rl.setMatrixAt(q * 2 + (side + 1) / 2, dummy.matrix);
+      }
+    });
+    dummy.rotation.order = 'XYZ';
+    for (const m of [sl, rl]) { m.instanceMatrix.needsUpdate = true; m.frustumCulled = false; }
+    return [sl, rl];
+  };
+
+
+  /* Two trains, one on each railroad, shuttling end to end at 38 tiles a second and waiting 4 s at each terminus.
+     They are drawn straight from the route's height profile (not the chunks), so they run along the whole line
+     whether or not the ground round them is loaded. A locomotive and six carriages, each a single mesh. */
+  const trainMat = new THREE.MeshLambertMaterial({ vertexColors: true }), SP = 12, NCARS = 7, SPEED = 38;
+  const trainGeo = (body, roof, nose) => mergeParts([[new THREE.BoxGeometry(3, 2.8, 10.6), body, 0, 1.7, 0], [new THREE.BoxGeometry(2.6, .5, 10), roof, 0, 3.35, 0], [new THREE.BoxGeometry(3.1, .4, 10.8), '#2a2d34', 0, .4, 0]].concat(nose ? [[new THREE.BoxGeometry(2.8, 1.2, 1.4), nose, 0, 2.4, 5.2], [new THREE.BoxGeometry(1.2, 1.4, 1.2), roof, 0, 3.9, 2.2]] : [[new THREE.BoxGeometry(3.04, .5, 6.4), '#9fd3e6', 0, 2.3, 0]]));
+  const geos = [trainGeo('#b23a2e', '#3a3d44', '#7d2a22'), trainGeo('#3b6fa0', '#d9d4c7', null), trainGeo('#e8e4d8', '#3b6fa0', null)];
+  const trains = hm.net ? hm.net.polylines.filter(pl => pl.kind === 1).map((pl, ti) => {
+    const cum = [0];
+    for (let i = 1; i < pl.pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pl.pts[i][0] - pl.pts[i - 1][0], pl.pts[i][1] - pl.pts[i - 1][1]));
+    const L = cum[cum.length - 1], Lt = NCARS * SP, cars = Array.from({ length: NCARS }, (_, i) => { const m = new THREE.Mesh(geos[i ? 1 + i % 2 : 0], trainMat); m.rotation.order = 'YXZ'; m.frustumCulled = false; wg.add(m); return m; });
+    return { pl, cum, L, Lt, cars, c: Lt / 2 + (ti + 1) * L / 3, dir: ti % 2 ? -1 : 1, dwell: 0 };
+  }) : [];
+  const onRoute = (T, s) => {   /* position, tangent and height at arc length s */
+    const { cum, pl } = T;
+    s = Math.min(T.L, Math.max(0, s));
+    let lo = 0, hi = cum.length - 2;
+    while (lo < hi) { const m = (lo + hi + 1) >> 1; if (cum[m] <= s) lo = m; else hi = m - 1; }
+    const u = (s - cum[lo]) / (cum[lo + 1] - cum[lo] || 1), [ax, ay] = pl.pts[lo], [bx, by] = pl.pts[lo + 1], len = Math.hypot(bx - ax, by - ay) || 1;
+    return [ax + (bx - ax) * u, ay + (by - ay) * u, (bx - ax) / len, (by - ay) / len, pl.prof[lo] + (pl.prof[lo + 1] - pl.prof[lo]) * u];
+  };
+  const moveTrains = dt => {
+    for (const T of trains) {
+      if (T.dwell > 0) T.dwell -= dt;
+      else {
+        T.c += T.dir * SPEED * dt;
+        if (T.c > T.L - T.Lt / 2) { T.c = T.L - T.Lt / 2; T.dir = -1; T.dwell = 4; }
+        else if (T.c < T.Lt / 2) { T.c = T.Lt / 2; T.dir = 1; T.dwell = 4; }
+      }
+      T.cars.forEach((m, i) => {
+        const s = T.c + T.dir * (T.Lt / 2 - (i + .5) * SP), [x, y, dx, dy, h] = onRoute(T, s), pitch = Math.atan2(onRoute(T, s + 3)[4] - onRoute(T, s - 3)[4], 6);
+        m.position.set(x, h + .28, -y);
+        m.rotation.set(T.dir > 0 ? -pitch : pitch, Math.atan2(dx, -dy) + (T.dir > 0 ? 0 : Math.PI), 0);
+      });
+    }
+  };
+  moveTrains(0);
+
+  const make = (lod, qx, qy) => {
+    const c = hm.getChunk(lod, qx, qy), g = new THREE.Group();
+    g.add(mkTerrain(c, lod));
+    if (lod === 0) {
+      const w = mkWater(c);
+      if (w) g.add(w);
+      for (const m of decorFor(c)) g.add(m);
+      for (const m of railsFor(c)) g.add(m);
+    }
+    wg.add(g);
+    maps[lod].set(qx * 65536 + qy, { g, qx, qy });
+  };
+  const drop = e => {
+    wg.remove(e.g);
+    e.g.traverse(o => { if (o.isInstancedMesh) o.dispose(); else if (o.geometry) o.geometry.dispose(); });
+  };
+  const update = (px, py, budget, dt = 0) => {
+    moveTrains(Math.min(dt, .1));
+    const want = [];
+    for (let lod = 2; lod >= 0; lod--) {
+      const size = CHUNK[lod], pcx = Math.floor(px / size), pcy = Math.floor(py / size), r = RAD[lod], map = maps[lod];
+      for (const [key, e] of map) if (Math.abs(e.qx - pcx) > r + 1 || Math.abs(e.qy - pcy) > r + 1) { drop(e); map.delete(key); }
+      for (let qy = Math.max(0, pcy - r); qy <= Math.min(NY[lod] - 1, pcy + r); qy++)
+        for (let qx = Math.max(0, pcx - r); qx <= Math.min(NX[lod] - 1, pcx + r); qx++)
+          if (!map.has(qx * 65536 + qy)) want.push([lod, qx, qy, Math.hypot((qx + .5) * size - px, (qy + .5) * size - py)]);
+    }
+    want.sort((a, b) => (b[0] == 2) - (a[0] == 2) || a[3] - b[3]);
+    for (let k = 0; k < want.length && k < budget; k++) make(want[k][0], want[k][1], want[k][2]);
+  };
+  update(pl.x, pl.y, 70);
+  return { update };
+};
+
 /* Static geometry for the scene the player is in: ground, walls, water, bridges,
    stations, labels and portal rings. Edict meshes are dropped and recreated by the
    next draw(). */
+let WV = null;   /* the chunk manager of the world being drawn, if any */
+
 function build(s) {
   if (grp) {
     sc.remove(grp);
@@ -1941,15 +2826,32 @@ function build(s) {
   for (const e of s.edicts) e.mesh = null;
 
   const inI = s.scene == 'int', C = tok(), wh = GSA.physics.WH(s),
-    slab = ([x, y, w, d], h, z, color) => put(grp, new THREE.BoxGeometry(w, h, d), color, x + w / 2, y + d / 2, z);
+    slab = ([x, y, w, d], h, z, color) => put(grp, new THREE.BoxGeometry(w, h, d), color, x + w / 2, y + d / 2, z),
+    /* a building on a heightmap: from the lowest ground under it (plus a skirt) up to wh above the highest */
+    ground = (x, y) => GSA.physics.groundZ(s, x, y),
+    span = ([x, y, w, d]) => {
+      const g = [[0, 0], [w, 0], [0, d], [w, d], [w / 2, d / 2]].map(([a, b]) => ground(x + a, y + b));
+      return [Math.min(...g), Math.max(...g)];
+    },
+    building = (r, color) => {
+      const [lo, hi] = span(r), h = hi - lo + wh + 1.5;
+      slab(r, h, lo - 1.5 + h / 2, color);
+    };
   sc.background = new THREE.Color(C.bg);
+  const big = !inI && !!s.city.world;   /* a continent: fog, a far camera, chunked terrain */
+  sc.fog = big ? new THREE.Fog(C.bg, 900, 7000) : null;
+  cam.near = big ? .3 : .1;
+  cam.far = big ? 9000 : 300;
+  cam.updateProjectionMatrix();
+  WV = null;
   if (!inI && s.city.mountains) grp.add(mountainMesh(s.city, C));
-  if (!inI && GSA.physics.terrain(s.city)) {
+  if (big) WV = worldView(s.city, C, grp, s.p);
+  else if (!inI && GSA.physics.terrain(s.city)) {
     grp.add(terrainMesh(s.city, C));
     if (GSA.physics.terrain(s.city).level) grp.add(waterMesh(s.city));
   }
   else put(grp, new THREE.BoxGeometry(s.size[0], .2, s.size[1]), C.ground, s.size[0] / 2, s.size[1] / 2, -.1);
-  s.walls.forEach(r => slab(r, wh, wh / 2, C.bld));
+  s.walls.forEach(r => inI ? slab(r, wh, wh / 2, C.bld) : building(r, C.bld));
 
   if (!inI) {
     (s.city.water || []).forEach(r => slab(r, .1, .02, '#2f7fd1'));
@@ -1961,8 +2863,16 @@ function build(s) {
       grp.add(l);
     });
     s.city.sites.forEach(q => {
+      if (!q.name) return;
       const l = lab(q.name, C.fg);
-      l.position.set(q.r[0] + q.r[2] / 2, wh + 1, -(q.r[1] + q.r[3] / 2));
+      l.position.set(q.r[0] + q.r[2] / 2, span(q.r)[1] + wh + 1, -(q.r[1] + q.r[3] / 2));
+      grp.add(l);
+    });
+    (s.city.places || []).forEach(q => {   /* a city's name, big enough to read from across the map */
+      const l = lab(q.name, C.fg);
+      l.scale.set(8 * (q.scale ?? 7), 1.5 * (q.scale ?? 7), 1);
+      l.material.fog = false;
+      l.position.set(q.at[0], ground(q.at[0], q.at[1]) + (q.height ?? 45), -q.at[1]);
       grp.add(l);
     });
   }
@@ -2004,8 +2914,18 @@ const KIND = {
   /* drawn by its own base.build(a), like a race's avatar; the model faces +z */
   vehicle: {
     make: e => {
-      const g = new THREE.Group();
-      e.base.build((geo, c, x, y, z) => addMesh(g, geo, c, x, y, z));
+      /* base.build hands back each part's mesh (a model may rotate or scale it, or hang a label on it), so build real
+         meshes first. Then, unless a part carries a child or is see-through (the ship's floating name), bake their
+         transforms into one geometry: one draw call per vehicle, since dozens can be parked. */
+      const g = new THREE.Group(), meshes = [];
+      e.base.build((geo, c, x, y, z) => {
+        const m = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: c }));
+        m.position.set(x, y, z);
+        meshes.push(m);
+        return m;
+      });
+      if (meshes.some(m => m.children.length || m.material.transparent)) meshes.forEach(m => g.add(m));
+      else g.add(new THREE.Mesh(mergeParts(meshes.map(m => { m.updateMatrix(); return [m.geometry.clone().applyMatrix4(m.matrix), m.material.color, 0, 0, 0]; })), vehicleMat));
       grp.add(g);
       return g;
     },
@@ -2083,10 +3003,14 @@ function draw(s, Y, Pt, dt) {
     }
   }
 
+  if (WV) WV.update(p.x, p.y, 3, dt);
+
   /* camera: behind the player along the view bearing, looking at them */
   const D = 13, cp = Math.cos(Pt),
     gz = s.scene == 'city' ? GSA.physics.groundZ(s, p.x, p.y) : 0, cz = gz + (p.z - gz) * .5;   /* follow the ground fully, a jump by half */
-  cam.position.lerp(new THREE.Vector3(p.x - Math.sin(Y) * cp * D, Math.sin(Pt) * D + cz, -(p.y - Math.cos(Y) * cp * D)), .2);
+  const cx = p.x - Math.sin(Y) * cp * D, cyy = p.y - Math.cos(Y) * cp * D,
+    camY = Math.max(Math.sin(Pt) * D + cz, (s.scene == 'city' ? GSA.physics.groundZ(s, cx, cyy) : 0) + 1);   /* never under the ground */
+  cam.position.lerp(new THREE.Vector3(cx, camY, -cyy), .2);
   if (s.scene == 'city' && s.city.mountains) {   /* the camera stays in the valley, not inside the wall */
     cam.position.x = Math.min(Math.max(cam.position.x, .4), s.size[0] - .4);
     cam.position.z = Math.min(Math.max(cam.position.z, .4 - s.size[1]), -.4);
@@ -2096,7 +3020,7 @@ function draw(s, Y, Pt, dt) {
     cam.position.x += (Math.random() - .5) * s.shk * 3;
     cam.position.y += (Math.random() - .5) * s.shk * 3;
   }
-  cam.lookAt(p.x, cz + .5, -p.y);
+  cam.lookAt(p.x, cz + .5 + Math.max(0, .2 - Pt) * 30, -p.y);   /* pitching below the horizon aims past the player, at the sky */
   ren.render(sc, cam);
 }
 
@@ -2494,7 +3418,7 @@ addEventListener('mousemove', e => {
   if (S.wheel) return GSA.ui.wheelMove(e.movementX, e.movementY);
   if (document.pointerLockElement === cv || e.buttons) {
     Y += e.movementX * .003;
-    Pt = Math.max(.2, Math.min(1.4, Pt + e.movementY * .003));
+    Pt = Math.max(-.5, Math.min(1.4, Pt + e.movementY * .003));   /* below .2 the camera drops to the ground and looks up */
   }
 });
 
@@ -2775,7 +3699,7 @@ Object.assign(window.GSA, {
       p = s.p, r = s.race, sp = r.speed, top = WH(s),
       wl = Math.hypot(mx, my),
       u = Math.hypot(p.vx, p.vy),
-      flr = () => p.z >= top - .2 && RC(p.x, p.y, ws) ? top : groundZ(s, p.x, p.y),
+      flr = () => { const g = groundZ(s, p.x, p.y); return p.z >= g + top - .2 && RC(p.x, p.y, ws) ? g + top : g; },   /* a roof is WH above the ground */
       launch = (vy, spin, ctl, cut) => {
         p.vz = vy;
         p.st = 'air';
@@ -2888,8 +3812,8 @@ Object.assign(window.GSA, {
       } else if (p.st == 'hang') p.vx = p.vy = 0
     }
     if (!gnd || p.vz > 0) {
-      const h0 = p.z,
-        fl = h0 >= top - .2 && RC(p.x, p.y, ws) ? top : groundZ(s, p.x, p.y);
+      const h0 = p.z, g0 = groundZ(s, p.x, p.y),
+        fl = h0 >= g0 + top - .2 && RC(p.x, p.y, ws) ? g0 + top : g0;
       if (p.st == 'hang') {
         p.tm -= dt;
         p.vz = 0;
@@ -3040,6 +3964,19 @@ Object.assign(window.GSA, {
     a(new THREE.BoxGeometry(1.1, .4, 1.2), '#2a2d34', 0, .9, -.15);
   };
 
+  /* The parked kinds (city.parked = [[kind, x, y, heading, colour]]): each has a model (front towards +z), a
+     collision radius, and handling: top speed, acceleration, turn rate, and the half-length and half-track the
+     ride/tilt code samples the ground at. A convertible has no roof, a snowmobile skis and a track. */
+  const B = (w, h, d) => new THREE.BoxGeometry(w, h, d), wheel = (a, x, y, z, r = .3, w = .22) => a(new THREE.CylinderGeometry(r, r, w, 8).rotateZ(Math.PI / 2), '#17181c', x, y, z);
+  const KINDS = {
+    car: { radius: .9, max: 16, acc: 14, turn: 2.2, hl: .9, hw: .6, model: (a, c) => { a(B(1.3, .5, 2.4), c, 0, .5, 0); a(B(1.1, .4, 1.2), '#2a2d34', 0, .92, -.15); [[-.65, .85], [.65, .85], [-.65, -.85], [.65, -.85]].forEach(([x, z]) => wheel(a, x, .3, z)); } },
+    convertible: { radius: .9, max: 18, acc: 16, turn: 2.4, hl: .9, hw: .6, model: (a, c) => { a(B(1.3, .5, 2.4), c, 0, .5, 0); a(B(1.1, .32, .08), '#9fd3e6', 0, .9, .5); a(B(1.0, .22, .8), '#2a2d34', 0, .8, -.35); [[-.65, .85], [.65, .85], [-.65, -.85], [.65, -.85]].forEach(([x, z]) => wheel(a, x, .3, z)); } },
+    van: { radius: 1.1, max: 13, acc: 10, turn: 1.8, hl: 1.4, hw: .8, model: (a, c) => { a(B(1.6, 1.5, 3.0), c, 0, 1.05, 0); a(B(1.4, .5, .08), '#2a2d34', 0, 1.45, 1.52); [[-.8, 1.0], [.8, 1.0], [-.8, -1.0], [.8, -1.0]].forEach(([x, z]) => wheel(a, x, .35, z, .35, .25)); } },
+    truck: { radius: 1.3, max: 12, acc: 8, turn: 1.6, hl: 1.7, hw: .9, model: (a, c) => { a(B(1.7, 1.3, 1.2), c, 0, 1.0, 1.35); a(B(1.5, .45, .08), '#2a2d34', 0, 1.35, 1.96); a(B(1.8, .9, 2.8), '#59616b', 0, .85, -.9); [[-.85, 1.35], [.85, 1.35], [-.85, -.2], [.85, -.2], [-.85, -1.6], [.85, -1.6]].forEach(([x, z]) => wheel(a, x, .38, z, .38, .28)); } },
+    moto: { radius: .5, max: 20, acc: 18, turn: 3, hl: .7, hw: .3, model: (a, c) => { a(B(.3, .45, 1.1), c, 0, .65, 0); a(B(.26, .12, .5), '#2a2d34', 0, .95, -.2); a(B(.7, .06, .06), '#2a2d34', 0, 1.0, .55); wheel(a, 0, .35, .7, .35, .12); wheel(a, 0, .35, -.7, .35, .12); } },
+    snowmobile: { radius: .75, max: 17, acc: 15, turn: 2.6, hl: .9, hw: .45, model: (a, c) => { a(B(.9, .45, 1.8), c, 0, .55, 0); a(B(.7, .3, .08), '#9fd3e6', 0, .95, .5); a(B(.6, .15, .5), '#2a2d34', 0, .85, -.4); [-.42, .42].forEach(x => a(B(.14, .08, 1.5), '#cfd3d6', x, .14, .8)); a(B(.5, .25, 1.4), '#17181c', 0, .2, -.5); } }
+  };
+
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
   class CarScript extends ObjectReference {
@@ -3047,6 +3984,7 @@ Object.assign(window.GSA, {
       super(self);
       self.speed = 0;
       self.pitch = self.roll = 0;
+      this.k = KINDS[self.vk || 'car'];
       this.driver = null;
       this.states = {
         Parked: {
@@ -3094,15 +4032,18 @@ Object.assign(window.GSA, {
         left = inp.pressed('move_left'), right = inp.pressed('move_right');
       this.last = s.t;
 
-      c.speed += ((up ? 14 : 0) - (down ? 18 : 0)) * dt;
-      c.speed = clamp(c.speed, -6, 16) * (1 - (up || down ? 0 : 1.5 * dt));
+      const k = this.k;
+      c.speed += ((up ? k.acc : 0) - (down ? k.acc * 1.3 : 0)) * dt;
+      c.speed = clamp(c.speed, -6, k.max) * (1 - (up || down ? 0 : 1.5 * dt));
       /* heading is a compass bearing, so turning right adds to it */
-      c.heading += ((right ? 1 : 0) - (left ? 1 : 0)) * 2.2 * dt * clamp(c.speed / 4, -1, 1);
+      c.heading += ((right ? 1 : 0) - (left ? 1 : 0)) * k.turn * dt * clamp(c.speed / 4, -1, 1);
 
       const nx = c.x + Math.sin(c.heading) * c.speed * dt,
         ny = c.y + Math.cos(c.heading) * c.speed * dt;
-      if (nx < .9 || nx > s.size[0] - .9 || ny < .9 || ny > s.size[1] - .9 || RC(nx, ny, s.walls.concat(s.city.water || []), .9) ||
-        GSA.physics.wet(s, nx, ny, c.z || 0) || GSA.physics.steep(s, c.x, c.y, nx, ny, Math.max(c.z || 0, c.gz ?? 0))) c.speed *= -.3;
+      const r = c.radius;
+      if (nx < r || nx > s.size[0] - r || ny < r || ny > s.size[1] - r || RC(nx, ny, s.walls.concat(s.city.water || []), r) ||
+        GSA.physics.wet(s, nx, ny, c.z || 0) || GSA.physics.steep(s, c.x, c.y, nx, ny, Math.max(c.z || 0, c.gz ?? 0)) ||
+        s.edicts.some(e => e !== c && !e.free && e.base && e.base.type == 'vehicle' && e.sc == s.scene && dist([e.x, e.y], [nx, ny]) < r + e.radius)) c.speed *= -.3;   /* walls, water, cliffs and other vehicles */
       else {
         c.x = nx;
         c.y = ny;
@@ -3124,8 +4065,8 @@ Object.assign(window.GSA, {
        When the ground falls away faster than the spring can follow, gravity takes over. */
     ride(s, dt) {
       const c = this.self, h = c.heading, fx = Math.sin(h), fy = Math.cos(h), rx = Math.cos(h), ry = -Math.sin(h),
-        g = (a, b) => groundZ(s, c.x + rx * a + fx * b, c.y + ry * a + fy * b),
-        fl = g(-.6, .9), fr = g(.6, .9), rl = g(-.6, -.9), rr = g(.6, -.9),
+        k = this.k, g = (a, b) => groundZ(s, c.x + rx * a + fx * b, c.y + ry * a + fy * b),
+        fl = g(-k.hw, k.hl), fr = g(k.hw, k.hl), rl = g(-k.hw, -k.hl), rr = g(k.hw, -k.hl),
         tgt = (fl + fr + rl + rr) / 4, up = tgt - (c.gz ?? tgt);
       c.gz = tgt;
       if (up > .02) {
@@ -3140,15 +4081,20 @@ Object.assign(window.GSA, {
         c.z = tgt - .12;
         c.vz = Math.max(c.vz, 0);
       }
-      const k = Math.min(1, 12 * dt);
-      c.pitch += (Math.atan2((fl + fr) / 2 - (rl + rr) / 2, 1.8) - c.pitch) * k;
-      c.roll += (Math.atan2((fl + rl) / 2 - (fr + rr) / 2, 1.2) - c.roll) * k;
+      const kk = Math.min(1, 12 * dt);
+      c.pitch += (Math.atan2((fl + fr) / 2 - (rl + rr) / 2, 2 * k.hl) - c.pitch) * kk;
+      c.roll += (Math.atan2((fl + rl) / 2 - (fr + rr) / 2, 2 * k.hw) - c.roll) * kk;
     }
   }
 
   GSA.bus.on('start', ({ S }) => {
     const at = S.city.car || [24.5, 13];
     spawn({ base: { type: 'vehicle', key: 'car', build: carModel }, x: at[0], y: at[1], z: groundZ({ scene: 'city', city: S.city }, at[0], at[1]), heading: 0, radius: .9, sc: 'city', script: CarScript });
+    /* the parked ones: all drivable, each handling like its kind */
+    for (const [kind, x, y, heading, colour] of S.city.parked || []) {
+      const K = KINDS[kind];
+      spawn({ base: { type: 'vehicle', key: kind, build: a => K.model(a, colour) }, vk: kind, x, y, z: groundZ({ scene: 'city', city: S.city }, x, y), heading, radius: K.radius, sc: 'city', script: CarScript });
+    }
   });
 })();</script></script>
 		<script pathHint="data/terminal-velocity.js">// /data/terminal-velocity.js
